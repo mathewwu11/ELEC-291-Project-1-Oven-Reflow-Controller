@@ -12,42 +12,41 @@ TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 BOOT_BUTTON   equ P4.5
 UP            equ P0.2
 DOWN		  equ P0.6
-; Output 3 bit binary state to tempurature MCU
+; Output 3 bit binary state to temperature MCU
 ; STATE_bit0
 ; STATE_bit1
 ; STATE_bit2
-; Inputs from tempurature MCU
+; Inputs from temperature MCU
  TEMP_OK     equ P0.6
  TEMP_50     equ P2.4
 
 org 0000H
    ljmp MainProgram
 
-; External interrupt 0 vector (not used in this code)
+; External intABORTupt 0 vector (not used in this code)
 org 0x0003
 	reti
 
-; Timer/Counter 0 overflow interrupt vector
+; Timer/Counter 0 overflow intABORTupt vector (not used in this code)
 org 0x000B
 	reti
 
-; External interrupt 1 vector (not used in this code)
+; External intABORTupt 1 vector (not used in this code)
 org 0x0013
 	reti
 
-; Timer/Counter 1 overflow interrupt vector (not used in this code)
+; Timer/Counter 1 overflow intABORTupt vector (not used in this code)
 org 0x001B
 	reti
 
-; Serial port receive/transmit interrupt vector (not used in this code)
+; Serial port receive/transmit intABORTupt vector (not used in this code)
 org 0x0023 
 	reti
 	
-; Timer/Counter 2 overflow interrupt vector
+; Timer/Counter 2 overflow intABORTupt vector
 org 0x002B
 	ljmp Timer2_ISR
 
-; These register definitions needed by 'math32.inc'
 DSEG at 30H
 Count1ms:           ds 2
 time:               ds 2
@@ -86,13 +85,13 @@ SOAK_TIME:      db 'Soak:   xx:xx   ', 0
 REFLOW_TIME:    db 'Reflow: xx:xx   ', 0
 RUN_TIME:       db 'xx:xx           ', 0
 READY:          db 'READY           ', 0
-SET_TEMP:       db 'SET TEMPURATURE ', 0 
+SET_TEMP:       db 'SET temperature ', 0 
 HEAT_SOAK:      db 'HEAT TO SOAK    ', 0
 SOAK:           db 'SOAKING         ', 0
 HEAT_REFLOW:    db 'HEAT TO REFLOW  ', 0
 REFLOW:         db 'REFLOWING       ', 0
 COOLING:        db 'COOLING DOWN    ', 0
-ERR:            db 'ERR             ', 0
+ABORT:          db 'PROCESS ABORTED ', 0
 ERR_CD:         db 'ERR:COOLING DOWN', 0
 CLR_TIME:       db '     ', 0
 
@@ -107,13 +106,13 @@ Timer2_Init:
 	; Set the reload value
 	mov RCAP2H, #high(TIMER2_RELOAD)
 	mov RCAP2L, #low(TIMER2_RELOAD)
-	; Init One millisecond interrupt counter.  It is a 16-bit variable made with two 8-bit parts
+	; Init One millisecond intABORTupt counter.  It is a 16-bit variable made with two 8-bit parts
 	clr a
 	mov Count1ms+0, a
 	mov Count1ms+1, a
-	; Enable the timer and interrupts
-    setb ET2  ; Enable timer 2 interrupt
-    CLR TR2  ; Enable timer 2
+	; Enable the timer and intABORTupts
+    setb ET2  ; Enable timer 2 intABORTupt
+    CLR TR2  ; Timer 2 is initally disabled
 	ret
 
 ;---------------------------------;
@@ -121,7 +120,7 @@ Timer2_Init:
 ;---------------------------------;
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
-	cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
+	cpl P1.0 ; To check the intABORTupt rate with oscilloscope. It must be precisely a 1 ms pulse.
 	
 	; The two registers used in the ISR must be saved in the stack
 	push acc
@@ -136,9 +135,9 @@ Timer2_ISR:
 Inc_Done:
 	; Check if 1 second has passed
 	mov a, Count1ms+0
-	cjne a, #low(250), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
+	cjne a, #low(1000), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
 	mov a, Count1ms+1
-	cjne a, #high(250), Timer2_ISR_done
+	cjne a, #high(1000), Timer2_ISR_done
 	
 	; 1 second has passed.  Set a flag so the main program knows
 	setb seconds_flag ; Let the main program know 1 second has passed
@@ -156,7 +155,7 @@ Timer2_ISR_done:
 ;---------------------------------;
 MainProgram:
     mov SP, #7FH ; Set the stack pointer to the begining of idata
-    setb EA   ; Enable Global interrupts
+    setb EA   ; Enable Global intABORTupts
     mov P0M0, #0
     mov P0M1, #0
     mov P2M0, #0
@@ -196,17 +195,17 @@ State_0:
     Set_Cursor (1,1)
     Send_Constant_String(#RUN_TIME)
     lcall update_uptime
-    ; if soak/reflow temperatures are not set, wait for tempuratures to be set
+    ; if soak/reflow temperatures are not set, wait for temperatures to be set
     jnb TEMP_OK, Temp_not_set
-    ; if soak/reflow tempuratures are set, controller is ready to start
+    ; if soak/reflow temperatures are set, controller is ready to start
     sjmp Idle
     
 ; TEMPERATURE NOT SET
 Temp_not_set:
-    ; prints "SET TEMPURATURE" message
+    ; prints "SET temperature" message
     Set_Cursor (2,1)
     Send_Constant_String(#SET_TEMP)
-    ; if BOOT_BUTTON or UP being pressed, wait for release
+    ; if BOOT_BUTTON or UP are being pressed, wait for release
     jnb BOOT_BUTTON, $
     jnb UP, $
 Temp_not_set_a:
@@ -224,7 +223,7 @@ Idle:
     ; prints "READY" message
     Set_Cursor (2,1)
     Send_Constant_String(#READY)
-    ; if BOOT_BUTTON or UP being pressed, wait for release
+    ; if BOOT_BUTTON or UP are being pressed, wait for release
     jnb BOOT_BUTTON, $
     jnb UP, $
 Idle_a:
@@ -234,24 +233,25 @@ Idle_a:
     jb BOOT_BUTTON, Idle_b
     ljmp setup
 Idle_b:
-    ; if soak/reflow tempuratures are not set, wait for tempuratures to be set
+    ; if soak/reflow temperatures are not set, wait for temperatures to be set
     jb TEMP_OK, Idle_c
     ljmp Temp_not_set
 Idle_c:
-    ; if UP is pressed, jump to State_1 (heating to soak tempurature)
+    ; if UP is pressed, jump to State_1 (heating to soak temperature)
     jb UP, Idle_a
     Wait_Milli_Seconds(#50) ; debounce time
     jb UP, Idle_a
     sjmp State_1
 
 ;-------------------------------------------------- STATE 1 --------------------------------------------------
-; heating to soak tempurature
+; heating to soak temperature
 State_1:
     ; reset uptime
     mov uptime+0, #0
     mov uptime+1, #0
     mov uptime_BCD+0, #0
     mov uptime_BCD+1, #0
+    lcall update_uptime
     ; prints "HEAT TO SOAK" message
     Set_Cursor(2,1)
     Send_Constant_String(#HEAT_SOAK)
@@ -261,23 +261,23 @@ State_1:
 Heating_To_Soak:
     ; if 1 second has passed, increment uptime
     lcall count_uptime
-    ; if uptime >= 1 minutes && tempurature < 50, jump to State_6 (error)
+    ; if uptime >= 1 minutes && temperature < 50, jump to State_6 (Error)
     mov a, uptime+1
     jz Heating_To_Soak_a
     jb TEMP_50, Heating_To_Soak_a
     ljmp State_6
 Heating_To_Soak_a:
-    ; if tempurature != soak temperature after 3 minutes, jump to State_6 (error)
+    ; if temperature != soak temperature after 3 minutes, jump to State_6 (Error)
     mov a, uptime+1
     cjne a, #0x3, Heating_To_Soak_b
     ljmp State_6
 Heating_To_Soak_b:
-    ; if tempurature == soak temperature, jump to State_2 (soaking)
+    ; if temperature == soak temperature, jump to State_2 (soaking)
     jnb TEMP_OK, State_2
     sjmp Heating_To_Soak
 
 ;-------------------------------------------------- STATE 2 --------------------------------------------------
-; soak tempurature has been reached, tempurature is held for [soaktime]
+; soak temperature has been reached, temperature is held for [soaktime]
 State_2:
     ; prints "SOAKING" message
     Set_Cursor(2,1)
@@ -292,11 +292,11 @@ State_2:
 Soaking:
     ; if 1 second has passed, increment uptime
     lcall count_uptime
-    ; if tempurature is incorrect, jump to State_6 (error)
+    ; if temperature is incorrect, jump to State_6 (Error)
     jnb TEMP_OK, Soaking_a
     ljmp State_6
 Soaking_a:
-    ; if uptime == calculated time, jump to State_3 (heating to reflow tempurature)
+    ; if uptime == calculated time, jump to State_3 (heating to reflow temperature)
     mov a, uptime+1
     mov b, calc_time+1
     cjne a, b, Soaking
@@ -306,7 +306,7 @@ Soaking_a:
     sjmp State_3
     
 ;-------------------------------------------------- STATE 3 --------------------------------------------------
-; heating to reflow tempurature
+; heating to reflow temperature
 State_3:
     ; clear calculated time from display
     Set_Cursor(1,12)
@@ -322,7 +322,7 @@ State_3:
 Heating_To_Reflow:
     ; if 1 second has passed, increment uptime
     lcall count_uptime
-    ; if tempurature != Reflow temperature after [max_heat_time], jump to State_6 (error)
+    ; if temperature != Reflow temperature after [max_heat_time], jump to State_6 (Error)
     mov a, uptime+1
     mov b, calc_time+1
     cjne a, b, Heating_To_Reflow_a
@@ -331,12 +331,12 @@ Heating_To_Reflow:
     cjne a, b, Heating_To_Reflow_a
     ljmp State_6
 Heating_To_Reflow_a:
-    ; if tempurature == Reflow temperature, jump to State_4 (Reflowing)
+    ; if temperature == Reflow temperature, jump to State_4 (Reflowing)
     jb TEMP_OK, State_4
     sjmp Heating_To_Reflow
 
 ;-------------------------------------------------- STATE 4 --------------------------------------------------
-; reflow tempurature has been reached, tempurature is held for [reflowtime]
+; reflow temperature has been reached, temperature is held for [reflowtime]
 State_4:
     ; prints "REFLOWING" message
     Set_Cursor(2,1)
@@ -351,11 +351,11 @@ State_4:
 Reflowing:
     ; if 1 second has passed, increment uptime
     lcall count_uptime
-    ; if tempurature is incorrect, jump to State_6 (error)
+    ; if temperature is incorrect, jump to State_6 (Error)
     jb TEMP_OK, Reflowing_a
     ljmp State_6
 Reflowing_a:
-    ; if uptime == calculated time, jump to State_3 (heating to reflow tempurature)
+    ; if uptime == calculated time, jump to State_3 (heating to reflow temperature)
     mov a, uptime+1
     mov b, calc_time+1
     cjne a, b, Reflowing
@@ -377,7 +377,7 @@ State_5:
 Cooldown:
     ; if 1 second has passed, increment uptime
     lcall count_uptime
-    ; loop while tempurature >= 50
+    ; loop while temperature >= 50
     jb TEMP_50, Cooldown
     ; stop timer 2 and reset 1ms counter
     clr TR2
@@ -388,15 +388,18 @@ Cooldown:
 ;-------------------------------------------------- STATE 6 --------------------------------------------------
 ; error occured
 State_6:
-    ; if tempurature >= 50, cooldown
-    jb TEMP_50, Error_Cooldown
     ; stop timer 2 and reset 1ms counter
     clr TR2
     mov count1ms+0, #0
     mov count1ms+0, #0
-    ; print "ERR" message
+    ; clear calculated time from display
+    Set_Cursor(1,12)
+    Send_Constant_String(#CLR_TIME)
+    ; if temperature >= 50, cooldown
+    jb TEMP_50, Error_Cooldown
+    ; print "ABORT" message
     Set_Cursor(2,1)
-    Send_Constant_String(#ERR)
+    Send_Constant_String(#ABORT)
 
 Error:
     ; if UP is pressed, jump to State_0 (idle)
@@ -412,7 +415,7 @@ Error_Cooldown:
 Error_Cooldown_a:
     ; if 1 second has passed, increment uptime
     lcall count_uptime
-    ; loop while tempurature >= 50
+    ; loop while temperature >= 50
     jb TEMP_50, Error_Cooldown_a
     sjmp State_6
 
@@ -436,6 +439,7 @@ set_soak_seconds:
     load_time(soaktime, soaktime_BCD)
     Set_Cursor(1,13)
     Cursor_On
+    ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
 set_soak_seconds_a:
     ; if UP is pressed, increment seconds
@@ -448,7 +452,7 @@ set_soak_seconds_b:
     jb DOWN, set_soak_seconds_c
     mov a, time+1
     ; if minutes > 0, decrement seconds
-    cjne a, #0x0, set_soak_seconds_e
+    jnz set_soak_seconds_e
     mov a, time+0
     ; if seconds > 30, decrement seconds
     cjne a, #0x1E, set_soak_seconds_e
@@ -482,16 +486,16 @@ set_soak_seconds_f:
     Wait_Milli_Seconds(#25)
     ; if UP is held, increment seconds
     jnb UP, set_soak_seconds_a
-    ; if DOWN button is held, increment seconds
+    ; if DOWN button is held, decrement seconds
     jnb DOWN, set_soak_seconds_b
     clr hold_button
 set_soak_seconds_g:
-    ; update display and wait 200 ms
+    ; update display and wait 250 ms
     unload_time(soaktime, soaktime_BCD)
     lcall update_soak_time
     Set_Cursor(1,13)
     Cursor_On
-    Wait_Milli_Seconds(#200)
+    Wait_Milli_Seconds(#250)
     ; if UP is held, set a flag so the program knows
     jnb UP, set_soak_seconds_h
     ; if DOWN button is held, set a flag so the program knows 
@@ -511,6 +515,7 @@ set_reflow_seconds:
     load_time(reflowtime, reflowtime_BCD)
     Set_Cursor(2,13)
     Cursor_On
+    ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
 set_reflow_seconds_a:
     ; if UP is pressed, increment seconds
@@ -523,7 +528,7 @@ set_reflow_seconds_b:
     jb DOWN, set_reflow_seconds_c
     mov a, time+1
     ; if minutes > 0, decrement seconds
-    cjne a, #0x0, set_reflow_seconds_e
+    jnz set_reflow_seconds_e
     mov a, time+0
     ; if seconds > 30, decrement seconds
     cjne a, #0x1E, set_reflow_seconds_e
@@ -557,16 +562,16 @@ set_reflow_seconds_f:
     Wait_Milli_Seconds(#25)
     ; if UP is held, increment seconds
     jnb UP, set_reflow_seconds_a
-    ; if DOWN button is held, increment seconds
+    ; if DOWN button is held, decrement seconds
     jnb DOWN, set_reflow_seconds_b
     clr hold_button
 set_reflow_seconds_g:
-    ; update display and wait 200 ms
+    ; update display and wait 250 ms
     unload_time(reflowtime, reflowtime_BCD)
     lcall update_reflow_time
     Set_Cursor(2,13)
     Cursor_On
-    Wait_Milli_Seconds(#200)
+    Wait_Milli_Seconds(#250)
     ; if UP is held, set a flag so the program knows
     jnb UP, set_reflow_seconds_h
     ; if DOWN button is held, set a flag so the program knows 
