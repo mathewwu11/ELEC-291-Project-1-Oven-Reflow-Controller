@@ -278,12 +278,12 @@ set_soak_temp_f:
     jnb DOWN, set_soak_temp_b
     clr hold_button
 set_soak_temp_g:
-    ; update display and wait 200 ms
+    ; update display and wait 250 ms
     lcall hex2bcd
     lcall display_soaktemp_BCD
     Set_Cursor(1,11)
     Cursor_On
-    Wait_Milli_Seconds(#200)
+    Wait_Milli_Seconds(#250)
     ; if UP is held, set a flag so the program knows
     jnb UP, set_soak_temp_h
     ; if DOWN button is held, set a flag so the program knows 
@@ -352,12 +352,12 @@ set_reflow_temp_f:
     jnb DOWN, set_reflow_temp_b
     clr hold_button
 set_reflow_temp_g:
-    ; update display and wait 200 ms
+    ; update display and wait 250 ms
     lcall hex2bcd
     lcall display_reflowtemp_BCD
     Set_Cursor(2,11)
     Cursor_On
-    Wait_Milli_Seconds(#200)
+    Wait_Milli_Seconds(#250)
     ; if UP is held, set a flag so the program knows
     jnb UP, set_reflow_temp_h
     ; if DOWN button is held, set a flag so the program knows 
