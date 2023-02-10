@@ -23,27 +23,27 @@ DOWN		  equ P0.6
 org 0000H
    ljmp MainProgram
 
-; External intABORTupt 0 vector (not used in this code)
+; External interrupt 0 vector (not used in this code)
 org 0x0003
 	reti
 
-; Timer/Counter 0 overflow intABORTupt vector (not used in this code)
+; Timer/Counter 0 overflow interrupt vector (not used in this code)
 org 0x000B
 	reti
 
-; External intABORTupt 1 vector (not used in this code)
+; External interrupt 1 vector (not used in this code)
 org 0x0013
 	reti
 
-; Timer/Counter 1 overflow intABORTupt vector (not used in this code)
+; Timer/Counter 1 overflow interrupt vector (not used in this code)
 org 0x001B
 	reti
 
-; Serial port receive/transmit intABORTupt vector (not used in this code)
+; Serial port receive/transmit interrupt vector (not used in this code)
 org 0x0023 
 	reti
 	
-; Timer/Counter 2 overflow intABORTupt vector
+; Timer/Counter 2 overflow interrupt vector
 org 0x002B
 	ljmp Timer2_ISR
 
@@ -106,12 +106,12 @@ Timer2_Init:
 	; Set the reload value
 	mov RCAP2H, #high(TIMER2_RELOAD)
 	mov RCAP2L, #low(TIMER2_RELOAD)
-	; Init One millisecond intABORTupt counter.  It is a 16-bit variable made with two 8-bit parts
+	; Init One millisecond interrupt counter.  It is a 16-bit variable made with two 8-bit parts
 	clr a
 	mov Count1ms+0, a
 	mov Count1ms+1, a
-	; Enable the timer and intABORTupts
-    setb ET2  ; Enable timer 2 intABORTupt
+	; Enable the timer and interrupts
+    setb ET2  ; Enable timer 2 interrupt
     CLR TR2  ; Timer 2 is initally disabled
 	ret
 
@@ -120,7 +120,7 @@ Timer2_Init:
 ;---------------------------------;
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
-	cpl P1.0 ; To check the intABORTupt rate with oscilloscope. It must be precisely a 1 ms pulse.
+	cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
 	
 	; The two registers used in the ISR must be saved in the stack
 	push acc
@@ -155,7 +155,7 @@ Timer2_ISR_done:
 ;---------------------------------;
 MainProgram:
     mov SP, #7FH ; Set the stack pointer to the begining of idata
-    setb EA   ; Enable Global intABORTupts
+    setb EA   ; Enable Global interrupts
     mov P0M0, #0
     mov P0M1, #0
     mov P2M0, #0
