@@ -10,8 +10,8 @@ TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 
 BOOT_BUTTON   equ P4.5
-UP            equ P0.2
-DOWN		  equ P0.6
+UP            equ P0.5
+DOWN		  equ P0.7
 ; Input 3 bit binary state from TIME/FSM MCU
 STATE_bit0      equ P2.1
 STATE_bit1      equ P2.2
