@@ -6,10 +6,13 @@ CLK  EQU 22118400
 BAUD equ 115200
 BRG_VAL equ (0x100-(CLK/(16*BAUD)))
 
+TIMER0_RATE   EQU 4096     ; 2048Hz squarewave (peak amplitude of CEM-1203 speaker)
+TIMER0_RELOAD EQU ((65536-(CLK/TIMER0_RATE)))
 TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 
 BOOT_BUTTON   equ P4.5
+SOUND_OUT     equ P2.5
 UP            equ P0.5
 DOWN		  equ P0.7
 ; Input 3 bit binary state from TIME/FSM MCU
@@ -29,9 +32,9 @@ org 0000H
 org 0x0003
 	reti
 
-; Timer/Counter 0 overflow interrupt vector (not used in this code)
+; Timer/Counter 0 overflow interrupt vector 
 org 0x000B
-	reti
+	ljmp Timer0_ISR
 
 ; External interrupt 1 vector (not used in this code)
 org 0x0013
@@ -66,6 +69,7 @@ seconds_flag:       dbit 1
 five_seconds_flag:  dbit 1
 mf:                 dbit 1 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 hold_button:        dbit 1
+sound_flag:         dbit 1
 
 CSEG
 ; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
@@ -95,6 +99,36 @@ REFLOW_TEMP:    db 'Reflow: xxx', 0xDF, 'C   ', 0
 CURRENT_TEMP:   db 'Temp:   xxx', 0xDF, 'C   ', 0
 TARGET_TEMP:    db 'Target: xxx', 0xDF, 'C   ', 0
 OVEN_OFF:       db 'OVEN OFF        ', 0
+
+;---------------------------------;
+; Routine to initialize the ISR   ;
+; for timer 0                     ;
+;---------------------------------;
+Timer0_Init:
+	mov a, TMOD
+	anl a, #0xf0 ; 11110000 Clear the bits for timer 0
+	orl a, #0x01 ; 00000001 Configure timer 0 as 16-timer
+	mov TMOD, a
+	mov TH0, #high(TIMER0_RELOAD)
+	mov TL0, #low(TIMER0_RELOAD)
+	; Set autoreload value
+	mov RH0, #high(TIMER0_RELOAD)
+	mov RL0, #low(TIMER0_RELOAD)
+	; Enable the timer and interrupts
+    setb ET0  ; Enable timer 0 interrupt
+    setb TR0  ; Start timer 0
+	ret
+	
+;---------------------------------;
+; ISR for timer 0                 ;
+;---------------------------------;
+Timer0_ISR:
+	jb sound_flag, Start_Chirping
+	reti
+
+Start_Chirping:
+	cpl SOUND_OUT 
+	reti
 
 ;---------------------------------;
 ; Routine to initialize the ISR   ;
@@ -202,6 +236,7 @@ MainProgram:
     lcall Timer2_Init
 
     clr seconds_flag
+    clr sound_flag
 
     mov count1ms+0, #0
     mov count1ms+0, #0
