@@ -233,7 +233,7 @@ State_1:
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
     lcall read_state
-    cjne a, #1, State_2
+    cjne a, #1, Jump_State_2 ; offset was too large for cjne to jump to State_2, branching to a ljmp
     ; diplay target temperature
     Set_Cursor(2,1)
     Send_Constant_String(#TARGET_TEMP)
@@ -243,6 +243,9 @@ State_1:
     Display_temp_BCD(2,8)
     ; turns on oven
     setb OVEN_CTL_PIN
+    sjmp Heating_To_Soak
+Jump_State_2:   ; ljmp to state 2
+    ljmp State_2
 
 Heating_To_Soak:
     ; check state
@@ -252,8 +255,8 @@ Heating_To_Soak:
     ; read temperature
     lcall Read_ADC
 
-    ; convert the voltage reading into temperature and store in temp_reading
-    ; display/send temp to PuTTY and LCD every second
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
     ; play sound
 
     ; if temperature >= reflow temperature, TEMP_OK = 0
@@ -277,8 +280,8 @@ State_2:
     
     lcall Read_ADC
 
-    ; convert the voltage reading into temperature and store in temp_reading
-    ; display/send temp to PuTTY and LCD every second
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
     ; play sound every 5 seconds
 
     Load_X(0)
@@ -309,7 +312,7 @@ State_3:
     Load_X(0)
     mov x+0, reflowtemp
     lcall hex2bcd
-    Display_sr_temp_BCD(2,8)
+    Display_temp_BCD(2,8)
     setb OVEN_CTL_PIN ; turn on oven
 
 Heating_To_Reflow:
@@ -320,8 +323,8 @@ Heating_To_Reflow:
     
     lcall Read_ADC
 
-    ; convert the voltage reading into temperature and store in temp_reading
-    ; display/send temp to PuTTY and LCD every second
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
     ; play sound every 5 seconds
     
     Load_X(0)
@@ -346,8 +349,8 @@ State_4:
 
     lcall Read_ADC
 
-    ; convert the voltage reading into temperature and store in temp_reading
-    ; display/send temp to PuTTY and LCD every second
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
     ; play sound every 5 seconds
 
     Load_X(0)
@@ -379,8 +382,8 @@ State_5:
 
     lcall Read_ADC
 
-    ; convert the voltage reading into temperature and store in temp_reading
-    ; display/send temp to PuTTY and LCD every second
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
     ; play sound every 5 seconds
 
     Load_X(0)
@@ -410,7 +413,7 @@ State_6:
     clr TEMP_50
     ljmp State_6
 
-return_state_0
+return_state_0:
     ljmp State_0
 ;-------------------------------------------------- SETUP ----------------------------------------------------
 setup:
@@ -483,9 +486,9 @@ set_soak_temp_f:
     Display_temp_BCD(1,8)
     Wait_Milli_Seconds(#25)
     ; if UP is held, increment temperature
-    jnb UP, set_soak_temp_a
+    jnb UP, set_soak_temp_h
     ; if DOWN button is held, decrement temperature
-    jnb DOWN, set_soak_temp_b
+    jnb DOWN, set_soak_temp_i
     clr hold_button
 set_soak_temp_g:
     ; update display and wait 250 ms
@@ -557,9 +560,9 @@ set_reflow_temp_f:
     Display_temp_BCD(2,8)
     Wait_Milli_Seconds(#25)
     ; if UP is held, increment temperature
-    jnb UP, set_reflow_temp_a
+    jnb UP, set_reflow_temp_h
     ; if DOWN button is held, decrement temperature
-    jnb DOWN, set_reflow_temp_b
+    jnb DOWN, set_reflow_temp_i
     clr hold_button
 set_reflow_temp_g:
     ; update display and wait 250 ms

@@ -13,9 +13,10 @@ BOOT_BUTTON   equ P4.5
 UP            equ P0.2
 DOWN		  equ P0.6
 ; Output 3 bit binary state to temperature MCU
-; STATE_bit0
-; STATE_bit1
-; STATE_bit2
+STATE_bit0      equ P2.1
+STATE_bit1      equ P2.2
+STATE_bit2      equ P2.3
+STATE_STABLE    equ P2.4
 ; Inputs from temperature MCU
  TEMP_OK     equ P0.6
  TEMP_50     equ P2.4

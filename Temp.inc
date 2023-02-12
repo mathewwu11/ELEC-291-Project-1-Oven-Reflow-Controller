@@ -53,6 +53,19 @@ endmac
 	lcall putchar
 	pop acc
 	ret
+
+; Sends 10-digit BCD number in bcd to PuTTY in ASCII
+Send_10_digit_BCD:
+    Send_BCD(bcd+4)
+    Send_BCD(bcd+3)
+    Send_BCD(bcd+2)
+    Send_BCD(bcd+1)
+    Send_BCD(bcd+0)
+    mov a, #'\r'
+    lcall putchar
+    mov a, #'\n'
+    lcall putchar
+    ret
 	
 Read_ADC:
     clr CE_ADC
@@ -108,11 +121,48 @@ SendString:
 SendStringDone:
     ret
 
-read_state
+read_state:
 	mov a, #0
-	add a, STATE_bit2
+	jb STATE_bit2, State_bit_2_High
 	rl a
-	add a, STATE_bit1
+	sjmp Check_State_bit_1
+State_bit_2_High:
+	add a, #1
 	rl a
-	add a, STATE_bit0
+Check_State_bit_1:
+	jb STATE_bit1, State_bit_1_High
+	rl a
+	sjmp Check_State_bit_0
+State_bit_1_High:
+	add a, #1
+	rl a
+Check_State_bit_0:
+	jb STATE_bit0, State_bit_0_High
 	ret
+State_bit_0_High:
+	add a, #1
+	ret
+
+
+Volt_To_Temp:
+	mov x+0, volt_reading+0
+	mov x+1, volt_reading+1
+	mov x+2, #0
+	mov x+3, #0
+
+	Load_Y(41)
+	lcall mul32
+
+	Load_Y(250)
+	lcall mul32
+
+	Load_Y(1000)
+	lcall div32
+	lcall div32
+
+	mov temp_reading, x+0
+	lcall hex2bcd
+
+	ret
+
+
