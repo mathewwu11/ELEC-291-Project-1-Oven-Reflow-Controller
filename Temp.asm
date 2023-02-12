@@ -357,7 +357,7 @@ State_3:
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
     lcall read_state
-    cjne a, #3, State_4
+    cjne a, #3, Jump_State_4
 
     ; turn on the oven
     setb OVEN_CTL_PIN
@@ -369,6 +369,10 @@ State_3:
     Display_temp_BCD(2,8)
 
     ; [sound saying the current state "Heating to reflow"]
+    sjmp Heating_To_Reflow
+
+Jump_State_4:   ; ljmp to state 4
+    ljmp State_4
 
 Heating_To_Reflow:
     ; read temperature every second
