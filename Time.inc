@@ -149,3 +149,15 @@ calculate_minutes:
 calculate_minutes_a:
 	lcall increment_minutes
 	sjmp calculate_minutes
+
+; Moves current state into state pins to communicate with other MCU. Also clears the STATE_STABLE flag to signify that the state is set and stable
+output_state:
+	clr STATE_STABLE
+	mov a, fsm_state
+	rrc a
+	mov STATE_bit0, c
+	rrc a
+	mov STATE_bit1, c	
+	rrc a
+	mov STATE_bit2, c
+	ret 
