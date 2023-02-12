@@ -61,6 +61,7 @@ reflowtime_BCD:     ds 2
 calc_time:          ds 2
 calc_time_BCD:      ds 2
 max_heat_time:      ds 2
+fsm_state:          ds 1
 
 BSEG
 seconds_flag:       dbit 1
@@ -107,7 +108,7 @@ Timer2_Init:
 	; Set the reload value
 	mov RCAP2H, #high(TIMER2_RELOAD)
 	mov RCAP2L, #low(TIMER2_RELOAD)
-	; Init One millisecond interrupt counter.  It is a 16-bit variable made with two 8-bit parts
+	; Init one millisecond interrupt counter.  It is a 16-bit variable made with two 8-bit parts
 	clr a
 	mov Count1ms+0, a
 	mov Count1ms+1, a
@@ -166,6 +167,14 @@ MainProgram:
     lcall Timer2_Init
 
     clr seconds_flag
+    clr hold_button
+
+    ; initial state = 0
+    mov fsm_state, #0
+    lcall output_state
+
+    setb TEMP_OK
+    setb TEMP_50
 
     mov count1ms+0, #0
     mov count1ms+0, #0
@@ -192,6 +201,8 @@ MainProgram:
 ;-------------------------------------------------- STATE 0 --------------------------------------------------
 ; idle state, reflow oven is off
 State_0:
+    mov fsm_state, #0   
+    lcall output_state  ; sets pins high or low according to the current state in order to communicate with the other MCU
     ; display uptime
     Set_Cursor (1,1)
     Send_Constant_String(#RUN_TIME)
@@ -247,6 +258,8 @@ Idle_c:
 ;-------------------------------------------------- STATE 1 --------------------------------------------------
 ; heating to soak temperature
 State_1:
+    mov fsm_state, #1  
+    lcall output_state  ; sets pins high or low according to the current state in order to communicate with the other MCU
     ; reset uptime
     mov uptime+0, #0
     mov uptime+1, #0
@@ -280,6 +293,8 @@ Heating_To_Soak_b:
 ;-------------------------------------------------- STATE 2 --------------------------------------------------
 ; soak temperature has been reached, temperature is held for [soaktime]
 State_2:
+    mov fsm_state, #2 
+    lcall output_state  ; sets pins high or low according to the current state in order to communicate with the other MCU
     ; prints "SOAKING" message
     Set_Cursor(2,1)
     Send_Constant_String(#SOAK)
@@ -309,6 +324,8 @@ Soaking_a:
 ;-------------------------------------------------- STATE 3 --------------------------------------------------
 ; heating to reflow temperature
 State_3:
+    mov fsm_state, #3
+    lcall output_state  ; sets pins high or low according to the current state in order to communicate with the other MCU
     ; clear calculated time from display
     Set_Cursor(1,12)
     Send_Constant_String(#CLR_TIME)
@@ -339,6 +356,8 @@ Heating_To_Reflow_a:
 ;-------------------------------------------------- STATE 4 --------------------------------------------------
 ; reflow temperature has been reached, temperature is held for [reflowtime]
 State_4:
+    mov fsm_state, #4
+    lcall output_state  ; sets pins high or low according to the current state in order to communicate with the other MCU
     ; prints "REFLOWING" message
     Set_Cursor(2,1)
     Send_Constant_String(#REFLOW)
@@ -368,6 +387,8 @@ Reflowing_a:
 ;-------------------------------------------------- STATE 5 --------------------------------------------------
 ; cooldown
 State_5:
+    mov fsm_state, #5
+    lcall output_state  ; sets pins high or low according to the current state in order to communicate with the other MCU
     ; clear calculated time from display
     Set_Cursor(1,12)
     Send_Constant_String(#CLR_TIME)
@@ -389,6 +410,8 @@ Cooldown:
 ;-------------------------------------------------- STATE 6 --------------------------------------------------
 ; error occured
 State_6:
+    mov fsm_state, #6
+    lcall output_state  ; sets pins high or low according to the current state in order to communicate with the other MCU
     ; stop timer 2 and reset 1ms counter
     clr TR2
     mov count1ms+0, #0

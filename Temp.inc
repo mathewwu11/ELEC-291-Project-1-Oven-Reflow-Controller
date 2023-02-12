@@ -67,6 +67,7 @@ Send_10_digit_BCD:
     lcall putchar
     ret
 	
+; Reads the output voltage from the ADC and stores it in volt_reading
 Read_ADC:
     clr CE_ADC
     mov R0, #00000001B ; Start bit:1
@@ -121,35 +122,26 @@ SendString:
 SendStringDone:
     ret
 
+; Moves current state into the state pins in order to communicate with the other MCU
 read_state:
 	mov a, #0
-	jb STATE_bit2, State_bit_2_High
-	rl a
-	sjmp Check_State_bit_1
-State_bit_2_High:
-	add a, #1
-	rl a
-Check_State_bit_1:
-	jb STATE_bit1, State_bit_1_High
-	rl a
-	sjmp Check_State_bit_0
-State_bit_1_High:
-	add a, #1
-	rl a
-Check_State_bit_0:
-	jb STATE_bit0, State_bit_0_High
-	ret
-State_bit_0_High:
-	add a, #1
+	mov c, STATE_bit2
+	rlc a
+	mov c, STATE_bit1
+	rlc a
+	mov c, STATE_bit0
+	rlc a
 	ret
 
 
+; Converts the voltage reading in the from the ADC to its corresponding temperature
 Volt_To_Temp:
 	mov x+0, volt_reading+0
 	mov x+1, volt_reading+1
 	mov x+2, #0
 	mov x+3, #0
 
+	
 	Load_Y(41)
 	lcall mul32
 
