@@ -13,12 +13,14 @@ BOOT_BUTTON   equ P4.5
 UP            equ P0.5
 DOWN		  equ P0.7
 ; Input 3 bit binary state from TIME/FSM MCU
-; STATE_bit0
-; STATE_bit1
-; STATE_bit2
+STATE_bit0      equ P2.1
+STATE_bit1      equ P2.2
+STATE_bit2      equ P2.3
+STATE_STABLE    equ P2.4
 ; Outputs to Time/FSM MCU
- TEMP_OK     equ P2.3
- TEMP_50     equ P2.4
+ TEMP_OK        equ P2.3
+ TEMP_50        equ P2.4
+ OVEN_CTL_PIN   equ P1.5
 
 org 0000H
    ljmp MainProgram
@@ -48,19 +50,27 @@ org 0x002B
 	ljmp Timer2_ISR
 
 DSEG at 30H
-Count1ms:           ds 2
-x:                  ds 4
-y:                  ds 4
-bcd:                ds 5
+Count1ms:           ds 2 
+x:                  ds 4 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
+y:                  ds 4 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
+bcd:                ds 5 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file 
 soaktemp:           ds 1
 reflowtemp:         ds 1
+volt_reading:       ds 2 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
+temp_reading:       ds 1
+fsm_state:          ds 1 
 
 BSEG
 seconds_flag:       dbit 1
-mf:                 dbit 1
+mf:                 dbit 1 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 hold_button:        dbit 1
 
 CSEG
+; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
+CE_ADC EQU P2.0 
+MY_MOSI EQU P2.1
+MY_MISO EQU P2.2
+MY_SCLK EQU P2.3
 ; These 'equ' must match the hardware wiring
 ; They are used by 'LCD_4bit.inc'
 LCD_RS equ P3.2
@@ -77,10 +87,12 @@ $include(math32.inc)
 $include(Temp.inc)
 $LIST
 
+;                   1234567890123456
 SOAK_TEMP:      db 'Soak:   xxx', 0xDF, 'C   ', 0
 REFLOW_TEMP:    db 'Reflow: xxx', 0xDF, 'C   ', 0
-CURRENT_TEMP:   db 'Temp:   xxxx', 0xDF, 'C  ', 0
-TARGET_TEMP:    db 'Target: xxxx', 0xDF, 'C  ', 0
+CURRENT_TEMP:   db 'Temp:   xxx', 0xDF, 'C   ', 0
+TARGET_TEMP:    db 'Target: xxx', 0xDF, 'C   ', 0
+OVEN_OFF:       db 'OVEN OFF        ', 0
 
 ;---------------------------------;
 ; Routine to initialize the ISR   ;
@@ -99,8 +111,29 @@ Timer2_Init:
 	mov Count1ms+1, a
 	; Enable the timer and interrupts
     setb ET2  ; Enable timer 2 interrupt
-    CLR TR2  ; Enable timer 2
+    CLR TR2  ; timer 2 is initially disabled
 	ret
+
+; Configure the serial port and baud rate
+InitSerialPort:
+    ; Since the reset button bounces, we need to wait a bit before
+    ; sending messages, otherwise we risk displaying gibberish!
+    mov R1, #222
+    mov R0, #166
+    djnz R0, $   ; 3 cycles->3*45.21123ns*166=22.51519us
+    djnz R1, $-4 ; 22.51519us*222=4.998ms
+    ; Now we can proceed with the configuration
+	orl	PCON,#0x80
+	mov	SCON,#0x52
+	mov	BDRCON,#0x00
+	mov	BRL,#BRG_VAL
+	mov	BDRCON,#0x1E ; BDRCON=BRR|TBCK|RBCK|SPD;
+    ret
+
+INIT_SPI:
+    setb MY_MISO    ; Make MISO an input pin
+    clr MY_SCLK     ; For mode (0,0) SCLK is zero
+    ret
 
 ;---------------------------------;
 ; ISR for timer 2                 ;
@@ -148,6 +181,9 @@ MainProgram:
     mov P2M0, #0
     mov P2M1, #0
     
+    lcall InitSerialPort
+    lcall INIT_SPI
+
     lcall LCD_4BIT
     lcall Timer2_Init
 
@@ -162,20 +198,29 @@ MainProgram:
 
     ljmp setup ; jump to setup after reset
 
+
 ;-------------------------------------------------- STATE 0 --------------------------------------------------
 ; idle state, reflow oven is off
 State_0:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #0, State_1
     ; temperature is set, TEMP_OK = 1
     setb TEMP_OK
     ; display current temperature
     Set_Cursor(1,1)
     Send_Constant_String(#CURRENT_TEMP)
     Set_Cursor(2,1)
-    Send_Constant_String(#TARGET_TEMP)
+    Send_Constant_String(#OVEN_OFF)
     ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
     
 Idle:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #0, State_1
     ; if BOOT_BUTTON is pressed, jump to setup
     jb BOOT_BUTTON, Idle
     Wait_Milli_Seconds(#50) ; debounce time
@@ -185,24 +230,192 @@ Idle:
 ;-------------------------------------------------- STATE 1 --------------------------------------------------
 ; heating to soak temperature
 State_1:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #1, Jump_State_2 ; offset was too large for cjne to jump to State_2, branching to a ljmp
+    ; diplay target temperature
+    Set_Cursor(2,1)
+    Send_Constant_String(#TARGET_TEMP)
+    Load_X(0)
+    mov x+0, soaktemp
+    lcall hex2bcd
+    Display_temp_BCD(2,8)
+    ; turns on oven
+    setb OVEN_CTL_PIN
+    sjmp Heating_To_Soak
+Jump_State_2:   ; ljmp to state 2
+    ljmp State_2
+
+Heating_To_Soak:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #1, State_2
+    ; read temperature
+    lcall Read_ADC
+
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
+    ; play sound
+
+    ; if temperature >= reflow temperature, TEMP_OK = 0
+    ; else 1
+    Load_X(0)
+    Load_Y(0)
+    mov x+0, temp_reading
+    mov y+0, soaktemp
+    lcall x_gteq_y
+    jnb mf, Heating_To_Soak
+    clr TEMP_OK
+    sjmp Heating_To_Soak
 
 ;-------------------------------------------------- STATE 2 --------------------------------------------------
 ; soak temperature has been reached, temperature is held for [soaktime]
 State_2:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #2, State_3
+    
+    lcall Read_ADC
+
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
+    ; play sound every 5 seconds
+
+    Load_X(0)
+    Load_Y(0)
+    mov x+0, temp_reading
+    mov y+0, soaktemp
+    lcall x_gteq_y
+    jb mf, Soaking_too_high
+    
+Soaking_too_low:
+    setb OVEN_CTL_PIN ; turn on the oven
+
+    ljmp State_2
+
+Soaking_too_high:
+    clr OVEN_CTL_PIN ; turn off the oven
+
+    ljmp State_2
 
 ;-------------------------------------------------- STATE 3 --------------------------------------------------
 ; heating to reflow temperature
 State_3:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #3, State_4
+    ; display target temperature
+    Load_X(0)
+    mov x+0, reflowtemp
+    lcall hex2bcd
+    Display_temp_BCD(2,8)
+    setb OVEN_CTL_PIN ; turn on oven
 
+Heating_To_Reflow:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #3, State_4
+    
+    lcall Read_ADC
+
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
+    ; play sound every 5 seconds
+    
+    Load_X(0)
+    Load_Y(0)
+    mov x+0, temp_reading
+    mov y+0, soaktemp
+    lcall x_gteq_y
+    jnb mf, Heating_To_Reflow
+    setb TEMP_OK
+    sjmp Heating_To_Reflow
+
+
+
+ 
 ;-------------------------------------------------- STATE 4 --------------------------------------------------
 ; reflow temperature has been reached, temperature is held for [reflowtime]
 State_4:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #4, State_5
 
-;------------------------------------------------- STATE 5/6 -------------------------------------------------
-; cooldown/error
-State_5_6:
+    lcall Read_ADC
 
-;-------------------------------------------------- SETUP --------------------------------------------------
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
+    ; play sound every 5 seconds
+
+    Load_X(0)
+    Load_Y(0)
+    mov x+0, temp_reading
+    mov y+0, soaktemp
+    lcall x_gteq_y
+    jb mf, Reflow_too_high
+
+Reflow_too_low:
+    setb OVEN_CTL_PIN ; turn on oven
+
+    ljmp State_4
+
+Reflow_too_high:
+    clr OVEN_CTL_PIN ; turn off oven
+
+    ljmp State_4
+
+
+;-------------------------------------------------- STATE 5 --------------------------------------------------
+; cooldown
+State_5:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #5, State_6
+    clr OVEN_CTL_PIN ; turn off oven
+
+    lcall Read_ADC
+
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temp to PuTTY and LCD every second
+    ; play sound every 5 seconds
+
+    Load_X(0)
+    Load_Y(50)
+    mov x+0, temp_reading
+    lcall x_gteq_y
+    jb mf, State_5
+    clr TEMP_50
+    ljmp State_5
+    
+
+
+;-------------------------------------------------- STATE 6 --------------------------------------------------
+; error
+State_6:
+    ; check state
+    jnb STATE_STABLE, $ ; wait for state to be stable
+    lcall read_state
+    cjne a, #6, return_state_0
+    clr OVEN_CTL_PIN
+
+    Load_X(0)
+    Load_Y(50)
+    mov x+0, temp_reading
+    lcall x_gteq_y
+    jb mf, State_5
+    clr TEMP_50
+    ljmp State_6
+
+return_state_0:
+    ljmp State_0
+;-------------------------------------------------- SETUP ----------------------------------------------------
 setup:
     ; temperature not set, TEMP_OK = 0
     clr TEMP_OK
@@ -216,11 +429,11 @@ setup:
     Load_x(0)
     mov x+0, soaktemp
     lcall hex2bcd
-    lcall display_soaktemp_BCD
-    ; display soak temperature
+    Display_temp_BCD(1,8)
+    ; display reflow temperature
     mov x+0, reflowtemp+0
     lcall hex2bcd
-    lcall display_reflowtemp_BCD
+    Display_temp_BCD(2,8)
 
 ; set soak temperature
 ; MAX: 240
@@ -270,17 +483,17 @@ set_soak_temp_e:
 set_soak_temp_f:
     ; update display and wait 25 ms
     lcall hex2bcd
-    lcall display_soaktemp_BCD
+    Display_temp_BCD(1,8)
     Wait_Milli_Seconds(#25)
     ; if UP is held, increment temperature
-    jnb UP, set_soak_temp_a
+    jnb UP, set_soak_temp_h
     ; if DOWN button is held, decrement temperature
-    jnb DOWN, set_soak_temp_b
+    jnb DOWN, set_soak_temp_i
     clr hold_button
 set_soak_temp_g:
     ; update display and wait 250 ms
     lcall hex2bcd
-    lcall display_soaktemp_BCD
+    Display_temp_BCD(1,8)
     Set_Cursor(1,11)
     Cursor_On
     Wait_Milli_Seconds(#250)
@@ -344,17 +557,17 @@ set_reflow_temp_e:
 set_reflow_temp_f:
     ; update display and wait 25 ms
     lcall hex2bcd
-    lcall display_reflowtemp_BCD
+    Display_temp_BCD(2,8)
     Wait_Milli_Seconds(#25)
     ; if UP is held, increment temperature
-    jnb UP, set_reflow_temp_a
+    jnb UP, set_reflow_temp_h
     ; if DOWN button is held, decrement temperature
-    jnb DOWN, set_reflow_temp_b
+    jnb DOWN, set_reflow_temp_i
     clr hold_button
 set_reflow_temp_g:
     ; update display and wait 250 ms
     lcall hex2bcd
-    lcall display_reflowtemp_BCD
+    Display_temp_BCD(2,8)
     Set_Cursor(2,11)
     Cursor_On
     Wait_Milli_Seconds(#250)
