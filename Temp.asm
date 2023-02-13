@@ -10,17 +10,17 @@ TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 
 BOOT_BUTTON   equ P4.5
-UP            equ P0.5
-DOWN		  equ P0.7
+UP            equ P0.2
+DOWN		  equ P0.6
 ; Input 3 bit binary state from TIME/FSM MCU
-STATE_bit0      equ P2.1
-STATE_bit1      equ P2.2
-STATE_bit2      equ P2.3
-STATE_STABLE    equ P2.4
+STATE_bit0      equ P1.2
+STATE_bit1      equ P1.3
+STATE_bit2      equ P1.4
+STATE_STABLE    equ P1.5
 ; Outputs to Time/FSM MCU
  TEMP_OK        equ P2.3
  TEMP_50        equ P2.4
- OVEN_CTL_PIN   equ P1.5
+ OVEN_CTL_PIN   equ P1.6
 
 org 0000H
    ljmp MainProgram
@@ -69,10 +69,10 @@ hold_button:        dbit 1
 
 CSEG
 ; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
-CE_ADC EQU P2.0 
-MY_MOSI EQU P2.1
-MY_MISO EQU P2.2
-MY_SCLK EQU P2.3
+CE_ADC  EQU P0.4
+MY_MOSI EQU P0.3
+MY_MISO EQU P0.2
+MY_SCLK EQU P0.1
 ; These 'equ' must match the hardware wiring
 ; They are used by 'LCD_4bit.inc'
 LCD_RS equ P3.2
@@ -201,7 +201,18 @@ MainProgram:
     lcall LCD_4BIT
     lcall Timer2_Init
 
+    setb STATE_bit0
+    setb STATE_bit1
+    setb STATE_bit2
+    setb STATE_STABLE
+
+    clr TEMP_OK
+    clr TEMP_50
+    clr OVEN_CTL_PIN
+
     clr seconds_flag
+    clr five_seconds_flag
+    clr hold_button
 
     mov count1ms+0, #0
     mov count1ms+0, #0
@@ -685,6 +696,5 @@ setup_done:
     Set_Cursor(1,1)
     Send_Constant_String(#CURRENT_TEMP)
     lcall Read_ADC
-    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    Display_temp_BCD(1,8)
     ljmp State_0
