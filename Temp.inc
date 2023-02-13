@@ -143,27 +143,28 @@ Volt_To_Temp:
 	mov x+2, #0
 	mov x+3, #0
 	
-	Load_Y(4096)
+    Load_Y(40039)
 	lcall mul32
 
-	Load_Y(100000)
-	lcall mul32
+    Load_Y(41500)
+    lcall div32
 
-	Load_Y(1023)
-	lcall div32
-	
-	Load_Y(3415)
-	lcall div32
-
-	Load_Y(415)
-	lcall div32
-
-	Load_Y(20)
-	lcall add32
+    Load_y(22)
+    lcall add32
 
 	mov temp_reading, x+0
 	lcall hex2bcd
 
 	ret
 
-
+Check_50:
+	Load_X(0)
+	mov x+0, temp_reading
+	Load_Y(50)
+	lcall x_gteq_y
+	jb mf, Check_50_gteq
+	clr TEMP_50
+	ret
+Check_50_gteq:
+	setb TEMP_50
+	ret

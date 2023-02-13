@@ -10,16 +10,16 @@ TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 
 BOOT_BUTTON   equ P4.5
-UP            equ P0.2
-DOWN		  equ P0.6
+UP            equ P0.7
+DOWN		  equ P0.5
 ; Input 3 bit binary state from TIME/FSM MCU
 STATE_bit0      equ P1.2
 STATE_bit1      equ P1.3
 STATE_bit2      equ P1.4
 STATE_STABLE    equ P1.5
 ; Outputs to Time/FSM MCU
- TEMP_OK        equ P2.3
- TEMP_50        equ P2.4
+ TEMP_OK        equ P1.0
+ TEMP_50        equ P1.1
  OVEN_CTL_PIN   equ P1.6
 
 org 0000H
@@ -144,7 +144,7 @@ INIT_SPI:
 ;---------------------------------;
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
-	cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
+	;cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
 	
 	; The two registers used in the ISR must be saved in the stack
 	push acc
@@ -192,6 +192,8 @@ MainProgram:
     setb EA   ; Enable Global interrupts
     mov P0M0, #0
     mov P0M1, #0
+    mov P1M0, #0
+    mov P1M1, #0
     mov P2M0, #0
     mov P2M1, #0
     
@@ -312,6 +314,9 @@ Heating_To_Soak_b:
     jnb mf, Heating_To_Soak_c
     clr TEMP_OK
 Heating_To_Soak_c:
+    ; if temperature >= 50, TEMP_50 = 1
+    ; else, TEMP_50 = 0
+    lcall Check_50
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
     lcall read_state
@@ -401,7 +406,7 @@ Heating_To_Reflow_b:
     Load_X(0)
     Load_Y(0)
     mov x+0, temp_reading
-    mov y+0, soaktemp
+    mov y+0, reflowtemp
     lcall x_gteq_y
     jnb mf, Heating_To_Reflow_c
     setb TEMP_OK
@@ -438,7 +443,7 @@ Reflowing_b:
     Load_X(0)
     Load_Y(0)
     mov x+0, temp_reading
-    mov y+0, soaktemp
+    mov y+0, reflowtemp
     lcall x_gteq_y
     jb mf, Reflowing_too_high
     ; if temperature >= soaktemp, turn off the oven
@@ -513,6 +518,9 @@ Cooldown_b:
     jb mf, Cooldown_c
     clr TEMP_50
 Cooldown_c:
+    ; if temperature >= 50, TEMP_50 = 1
+    ; else, TEMP_50 = 0
+    lcall Check_50
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
     lcall read_state
