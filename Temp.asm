@@ -6,10 +6,21 @@ CLK  EQU 22118400
 BAUD equ 115200
 BRG_VAL equ (0x100-(CLK/(16*BAUD)))
 
+TIMER0_RATE   EQU 4096     ; 2048Hz squarewave (peak amplitude of CEM-1203 speaker)
+TIMER0_RELOAD EQU ((65536-(CLK/TIMER0_RATE)))
+TIMER1_RATE    EQU 22050     ; 22050Hz is the sampling rate of the wav file we are playing
+TIMER1_RELOAD  EQU 0x10000-(CLK/TIMER1_RATE)
 TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 
+; The pins used for SPI
+FLASH_CE  EQU  P2.5
+PIN_TWO_FOUR   EQU  P2.4 
+PIN_TWO_ONE   EQU  P2.1
+PIN_TWO_ZERO   EQU  P2.0 
+
 BOOT_BUTTON   equ P4.5
+SPEAKER  EQU P2.6 ; Used with a MOSFET to turn off speaker when not in use
 UP            equ P0.7
 DOWN		  equ P0.5
 ; Input 3 bit binary state from TIME/FSM MCU
@@ -21,6 +32,19 @@ STATE_STABLE    equ P1.5
  TEMP_OK        equ P1.0
  TEMP_50        equ P1.1
  OVEN_CTL_PIN   equ P1.6
+
+ ; Commands supported by the SPI flash memory according to the datasheet
+WRITE_ENABLE     EQU 0x06  ; Address:0 Dummy:0 Num:0
+WRITE_DISABLE    EQU 0x04  ; Address:0 Dummy:0 Num:0
+READ_STATUS      EQU 0x05  ; Address:0 Dummy:0 Num:1 to infinite
+READ_BYTES       EQU 0x03  ; Address:3 Dummy:0 Num:1 to infinite
+READ_SILICON_ID  EQU 0xab  ; Address:0 Dummy:3 Num:1 to infinite
+FAST_READ        EQU 0x0b  ; Address:3 Dummy:1 Num:1 to infinite
+WRITE_STATUS     EQU 0x01  ; Address:0 Dummy:0 Num:1
+WRITE_BYTES      EQU 0x02  ; Address:3 Dummy:0 Num:1 to 256
+ERASE_ALL        EQU 0xc7  ; Address:0 Dummy:0 Num:0
+ERASE_BLOCK      EQU 0xd8  ; Address:3 Dummy:0 Num:0
+READ_DEVICE_ID   EQU 0x9f  ; Address:0 Dummy:2 Num:1 to infinite
 
 org 0000H
    ljmp MainProgram
@@ -60,12 +84,17 @@ reflowtemp:         ds 1
 volt_reading:       ds 2 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 temp_reading:       ds 1
 fsm_state:          ds 1 
+w:   				ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
+temp_sound_state:     ds 1 
+
 
 BSEG
 seconds_flag:       dbit 1
 five_seconds_flag:  dbit 1
 mf:                 dbit 1 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 hold_button:        dbit 1
+sound_flag:         dbit 1
+playstart_flag:      dbit 1 ;used in play temp
 
 CSEG
 ; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
@@ -95,6 +124,141 @@ REFLOW_TEMP:    db 'Reflow: xxx', 0xDF, 'C   ', 0
 CURRENT_TEMP:   db 'Temp:   xxx', 0xDF, 'C   ', 0
 TARGET_TEMP:    db 'Target: xxx', 0xDF, 'C   ', 0
 OVEN_OFF:       db 'OVEN OFF        ', 0
+
+
+;---------------------------------;
+; Routine to initialize the ISR   ;
+; for timer 0                     ;
+;---------------------------------;
+Timer0_Init:
+	mov a, TMOD
+	anl a, #0xf0 ; 11110000 Clear the bits for timer 0
+	orl a, #0x01 ; 00000001 Configure timer 0 as 16-timer
+	mov TMOD, a
+	mov TH0, #high(TIMER0_RELOAD)
+	mov TL0, #low(TIMER0_RELOAD)
+	; Set autoreload value
+	mov RH0, #high(TIMER0_RELOAD)
+	mov RL0, #low(TIMER0_RELOAD)
+	; Enable the timer and interrupts
+    setb ET0  ; Enable timer 0 interrupt
+    setb TR0  ; Start timer 0
+	ret
+	
+;---------------------------------;
+; ISR for timer 0                 ;
+;---------------------------------;
+Timer0_ISR:
+	jb sound_flag, Start_Chirping
+	reti
+
+Start_Chirping:
+	cpl SPEAKER 
+	reti
+;-------------------------------------;
+; ISR for Timer 1.  Used to playback  ;
+; the WAV file stored in the SPI      ;
+; flash memory.                       ;
+;-------------------------------------;
+Timer1_ISR:
+	; The registers used in the ISR must be saved in the stack
+	push acc
+	push psw
+	
+	; Check if the play counter is zero.  If so, stop playing sound.
+	mov a, w+0
+	orl a, w+1
+	orl a, w+2
+	jz stop_playing
+	
+	; Decrement play counter 'w'.  In this implementation 'w' is a 24-bit counter.
+	mov a, #0xff
+	dec w+0
+	cjne a, w+0, keep_playing
+	dec w+1
+	cjne a, w+1, keep_playing
+	dec w+2
+	
+keep_playing:
+	setb SPEAKER
+	lcall Send_SPI ; Read the next byte from the SPI Flash...
+	mov P0, a ; WARNING: Remove this if not using an external DAC to use the pins of P0 as GPIO
+	add a, #0x80
+	mov DADH, a ; Output to DAC. DAC output is pin P2.3
+	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+	sjmp Timer1_ISR_Done
+
+stop_playing:
+	clr TR1 ; Stop timer 1
+	setb FLASH_CE  ; Disable SPI Flash
+	clr SPEAKER ; Turn off speaker.  Removes hissing noise when not playing sound.
+	mov DADH, #0x80 ; middle of range
+	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+
+Timer1_ISR_Done:	
+	pop psw
+	pop acc
+	reti
+
+;---------------------------------;
+; Sends AND receives a byte via   ;
+; SPI.                            ;
+;---------------------------------;
+Send_SPI:
+	SPIBIT MAC
+	    ; Send/Receive bit %0
+		rlc a
+		mov PIN_TWO_FOUR, c
+		setb PIN_TWO_ZERO
+		mov c, PIN_TWO_ONE
+		clr PIN_TWO_ZERO
+		mov acc.0, c
+	ENDMAC
+	
+	SPIBIT(7)
+	SPIBIT(6)
+	SPIBIT(5)
+	SPIBIT(4)
+	SPIBIT(3)
+	SPIBIT(2)
+	SPIBIT(1)
+	SPIBIT(0)
+
+	ret
+
+Timer1_Init:
+	; Configure P2.0, P2.4, P2.5 as open drain outputs
+	orl P2M0, #0b_0011_0001
+	orl P2M1, #0b_0011_0001
+	setb PIN_TWO_ONE  ; Configured as input
+	setb FLASH_CE ; CS=1 for SPI flash memory
+	clr PIN_TWO_ZERO   ; Rest state of SCLK=0
+	clr SPEAKER   ; Turn off speaker.
+	
+	; Configure timer 1
+	anl	TMOD, #0x0F ; Clear the bits of timer 1 in TMOD
+	orl	TMOD, #0x10 ; Set timer 1 in 16-bit timer mode.  Don't change the bits of timer 0
+	mov TH1, #high(TIMER1_RELOAD)
+	mov TL1, #low(TIMER1_RELOAD)
+	; Set autoreload value
+	mov RH1, #high(TIMER1_RELOAD)
+	mov RL1, #low(TIMER1_RELOAD)
+
+	; Enable the timer and interrupts
+    setb ET1  ; Enable timer 1 interrupt
+	; setb TR1 ; Timer 1 is only enabled to play stored sound
+
+	; Configure the DAC.  The DAC output we are using is P2.3, but P2.2 is also reserved.
+	mov DADI, #0b_1010_0000 ; ACON=1
+	mov DADC, #0b_0011_1010 ; Enabled, DAC mode, Left adjusted, CLK/4
+	mov DADH, #0x80 ; Middle of scale
+	mov DADL, #0
+	orl DADC, #0b_0100_0000 ; Start DAC by GO/BSY=1
+
+check_DAC_init:
+	mov a, DADC
+	jb acc.6, check_DAC_init ; Wait for DAC to finish
+	setb EA ; Enable interrupts
 
 ;---------------------------------;
 ; Routine to initialize the ISR   ;
@@ -199,6 +363,8 @@ MainProgram:
     
     lcall InitSerialPort
     lcall INIT_SPI
+    lcall Timer0_Init
+    lcall Timer1_Init
 
     lcall LCD_4BIT
     lcall Timer2_Init
@@ -706,3 +872,173 @@ setup_done:
     lcall Read_ADC
     Display_temp_BCD(1,8)
     ljmp State_0
+
+    ;-------------------------------------------------- SOUND ----------------------------------------------------
+; NEED TO FIGURE OUT INDEX AND BYTES OF SOUNDS
+
+play_temp: 
+      mov a, temp_sound_state
+
+temp_sound_state0:
+      cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
+      jnb  playstart_flag, temp_sound_state0_done
+      clr C
+      mov a, 
+     
+Sound_Heating_To_Soak:
+	clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory where to start playing
+	mov a, #0x00
+	lcall Send_SPI
+	mov a, #0xa8
+	lcall Send_SPI
+	mov a, #0xd1
+	lcall Send_SPI
+	mov a, #0x00 ; Request first byte to send to DAC
+	lcall Send_SPI
+	
+	mov w+2, #0x00
+	mov w+1, #0x66
+	mov w+0, #0x50
+	
+	setb SPEAKER ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+
+Sound_Soaking:
+	clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory where to start playing
+	mov a, #0x01
+	lcall Send_SPI
+	mov a, #0x0f
+	lcall Send_SPI
+	mov a, #0x21
+	lcall Send_SPI
+	mov a, #0x00 ; Request first byte to send to DAC
+	lcall Send_SPI
+	
+	mov w+2, #0x01
+	mov w+1, #0x4b
+	mov w+0, #0xe7
+	
+	setb SPEAKER ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+    ret
+
+Sound_Heating_To_Reflow:
+	clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory where to start playing
+	mov a, #0x02
+	lcall Send_SPI
+	mov a, #0x5b
+	lcall Send_SPI
+	mov a, #0x08
+	lcall Send_SPI
+	mov a, #0x00 ; Request first byte to send to DAC
+	lcall Send_SPI
+	
+	mov w+2, #0x
+	mov w+1, #0x47
+	mov w+0, #0x5a
+	
+	setb SPEAKER ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+    ret
+
+Sound_Reflowing:
+	clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory where to start playing
+	mov a, #0x01
+	lcall Send_SPI
+	mov a, #0x28
+	lcall Send_SPI
+	mov a, #0x07
+	lcall Send_SPI
+	mov a, #0x01 ; Request first byte to send to DAC
+	lcall Send_SPI
+	
+	mov w+2, #0x00
+	mov w+1, #0x1f
+	mov w+0, #0x2b
+	
+	setb SPEAKER ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+    ret
+
+Sound_Cooldown:
+	clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory where to start playing
+	mov a, #0x01
+	lcall Send_SPI
+	mov a, #0x47
+	lcall Send_SPI
+	mov a, #0x32
+	lcall Send_SPI
+	mov a, #0x01 ; Request first byte to send to DAC
+	lcall Send_SPI
+	
+	mov w+2, #0x00
+	mov w+1, #0xc3
+	mov w+0, #0x35
+	
+	setb SPEAKER ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+    ret
+
+Sound_Error:
+	clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory where to start playing
+	mov a, #0x02
+	lcall Send_SPI
+	mov a, #0x0b
+	lcall Send_SPI
+	mov a, #0x67
+	lcall Send_SPI
+	mov a, #0x02 ; Request first byte to send to DAC
+	lcall Send_SPI
+	
+	mov w+2, #0x00
+	mov w+1, #0xf5
+	mov w+0, #0x28
+	
+	setb SPEAKER ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+    ret
+    
+
+    
