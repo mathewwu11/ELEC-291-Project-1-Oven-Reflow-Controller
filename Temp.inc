@@ -54,8 +54,10 @@ endmac
 	pop acc
 	ret
 
-; Sends 10-digit BCD number in bcd to PuTTY in ASCII
+; Displays 4-digit BCD number & 
+; sends 10-digit BCD number in bcd to PuTTY in ASCII
 Send_10_digit_BCD:
+	Display_temp_BCD(1,8)
     Send_BCD(bcd+4)
     Send_BCD(bcd+3)
     Send_BCD(bcd+2)
@@ -140,21 +142,29 @@ Volt_To_Temp:
 	mov x+1, volt_reading+1
 	mov x+2, #0
 	mov x+3, #0
-
 	
-	Load_Y(41)
+    Load_Y(40039)
 	lcall mul32
 
-	Load_Y(250)
-	lcall mul32
+    Load_Y(41500)
+    lcall div32
 
-	Load_Y(1000)
-	lcall div32
-	lcall div32
+    Load_y(22)
+    lcall add32
 
 	mov temp_reading, x+0
 	lcall hex2bcd
 
 	ret
 
-
+Check_50:
+	Load_X(0)
+	mov x+0, temp_reading
+	Load_Y(50)
+	lcall x_gteq_y
+	jb mf, Check_50_gteq
+	clr TEMP_50
+	ret
+Check_50_gteq:
+	setb TEMP_50
+	ret

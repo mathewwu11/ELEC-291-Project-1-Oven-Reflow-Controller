@@ -13,13 +13,13 @@ BOOT_BUTTON   equ P4.5
 UP            equ P0.2
 DOWN		  equ P0.6
 ; Output 3 bit binary state to temperature MCU
-STATE_bit0      equ P2.1
-STATE_bit1      equ P2.2
-STATE_bit2      equ P2.3
-STATE_STABLE    equ P2.4
+STATE_bit0      equ P1.2
+STATE_bit1      equ P1.3
+STATE_bit2      equ P1.4
+STATE_STABLE    equ P1.5
 ; Inputs from temperature MCU
- TEMP_OK     equ P0.6
- TEMP_50     equ P2.4
+ TEMP_OK     equ P0.0
+ TEMP_50     equ P0.1
 
 org 0000H
    ljmp MainProgram
@@ -87,7 +87,7 @@ SOAK_TIME:      db 'Soak:   xx:xx   ', 0
 REFLOW_TIME:    db 'Reflow: xx:xx   ', 0
 RUN_TIME:       db 'xx:xx           ', 0
 READY:          db 'READY           ', 0
-SET_TEMP:       db 'SET temperature ', 0 
+SET_TEMP:       db 'SET TEMPERATURE ', 0 
 HEAT_SOAK:      db 'HEAT TO SOAK    ', 0
 SOAK:           db 'SOAKING         ', 0
 HEAT_REFLOW:    db 'HEAT TO REFLOW  ', 0
@@ -122,7 +122,7 @@ Timer2_Init:
 ;---------------------------------;
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
-	cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
+	;cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
 	
 	; The two registers used in the ISR must be saved in the stack
 	push acc
@@ -160,6 +160,8 @@ MainProgram:
     setb EA   ; Enable Global interrupts
     mov P0M0, #0
     mov P0M1, #0
+    mov P1M0, #0
+    mov P1M1, #0
     mov P2M0, #0
     mov P2M1, #0
     

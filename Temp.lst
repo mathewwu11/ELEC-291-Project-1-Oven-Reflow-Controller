@@ -8,20 +8,20 @@
 0000             10   TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 0000             11   
 0000             12   BOOT_BUTTON   equ P4.5
-0000             13   UP            equ P0.5
-0000             14   DOWN               equ P0.7
+0000             13   UP            equ P0.7
+0000             14   DOWN               equ P0.5
 0000             15   ; Input 3 bit binary state from TIME/FSM MCU
-0000             16   STATE_bit0      equ P2.1
-0000             17   STATE_bit1      equ P2.2
-0000             18   STATE_bit2      equ P2.3
-0000             19   STATE_STABLE    equ P2.4
+0000             16   STATE_bit0      equ P1.2
+0000             17   STATE_bit1      equ P1.3
+0000             18   STATE_bit2      equ P1.4
+0000             19   STATE_STABLE    equ P1.5
 0000             20   ; Outputs to Time/FSM MCU
-0000             21    TEMP_OK        equ P2.3
-0000             22    TEMP_50        equ P2.4
-0000             23    OVEN_CTL_PIN   equ P1.5
+0000             21    TEMP_OK        equ P1.0
+0000             22    TEMP_50        equ P1.1
+0000             23    OVEN_CTL_PIN   equ P1.6
 0000             24   
 0000             25   org 0000H
-0000 020523      26      ljmp MainProgram
+0000 02056E      26      ljmp MainProgram
 0003             27   
 0003             28   ; External interrupt 0 vector (not used in this code)
 0003             29   org 0x0003
@@ -45,7 +45,7 @@
 0024             47            
 0024             48   ; Timer/Counter 2 overflow interrupt vector
 002B             49   org 0x002B
-002B 0204F1      50            ljmp Timer2_ISR
+002B 02053E      50            ljmp Timer2_ISR
 002E             51   
 0030             52   DSEG at 30H
 0030             53   Count1ms:           ds 2
@@ -67,10 +67,10 @@
 0004             69   
 002E             70   CSEG
 002E             71   ; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
-002E             72   CE_ADC EQU P2.0 
-002E             73   MY_MOSI EQU P2.1
-002E             74   MY_MISO EQU P2.2
-002E             75   MY_SCLK EQU P2.3
+002E             72   CE_ADC  EQU P0.4
+002E             73   MY_MOSI EQU P0.3
+002E             74   MY_MISO EQU P0.2
+002E             75   MY_SCLK EQU P0.1
 002E             76   ; These 'equ' must match the hardware wiring
 002E             77   ; They are used by 'LCD_4bit.inc'
 002E             78   LCD_RS equ P3.2
@@ -83,969 +83,1006 @@
 002E             85   
                 553   $LIST
                  89   $LIST
-0464             91   
-0464             92   ;                   1234567890123456
-0464 536F616B    93   SOAK_TEMP:      db 'Soak:   xxx', 0xDF, 'C   ', 0
+04B1             91   
+04B1             92   ;                   1234567890123456
+04B1 536F616B    93   SOAK_TEMP:      db 'Soak:   xxx', 0xDF, 'C   ', 0
      3A202020
      787878DF
      43202020
      00
-0475 5265666C    94   REFLOW_TEMP:    db 'Reflow: xxx', 0xDF, 'C   ', 0
+04C2 5265666C    94   REFLOW_TEMP:    db 'Reflow: xxx', 0xDF, 'C   ', 0
      6F773A20
      787878DF
      43202020
      00
-0486 54656D70    95   CURRENT_TEMP:   db 'Temp:   xxx', 0xDF, 'C   ', 0
+04D3 54656D70    95   CURRENT_TEMP:   db 'Temp:   xxx', 0xDF, 'C   ', 0
      3A202020
      787878DF
      43202020
      00
-0497 54617267    96   TARGET_TEMP:    db 'Target: xxx', 0xDF, 'C   ', 0
+04E4 54617267    96   TARGET_TEMP:    db 'Target: xxx', 0xDF, 'C   ', 0
      65743A20
      787878DF
      43202020
      00
-04A8 4F56454E    97   OVEN_OFF:       db 'OVEN OFF        ', 0
+04F5 4F56454E    97   OVEN_OFF:       db 'OVEN OFF        ', 0
      204F4646
      20202020
      20202020
      00
-04B9             98   
-04B9             99   ;---------------------------------;
-04B9            100   ; Routine to initialize the ISR   ;
-04B9            101   ; for timer 2                     ;
-04B9            102   ;---------------------------------;
-04B9            103   Timer2_Init:
-04B9 75C800     104            mov T2CON, #0 ; Stop timer/counter.  Autoreload mode.
-04BC 75CDA9     105            mov TH2, #high(TIMER2_RELOAD)
-04BF 75CC9A     106            mov TL2, #low(TIMER2_RELOAD)
-04C2            107            ; Set the reload value
-04C2 75CBA9     108            mov RCAP2H, #high(TIMER2_RELOAD)
-04C5 75CA9A     109            mov RCAP2L, #low(TIMER2_RELOAD)
-04C8            110            ; Init one millisecond interrupt counter.  It is a 16-bit variable made with two 8-bit parts
-04C8 E4         111            clr a
-04C9 F530       112            mov Count1ms+0, a
-04CB F531       113            mov Count1ms+1, a
-04CD            114       ; Init five second interrupt counter
-04CD F532       115       mov Count5s, a
-04CF            116            ; Enable the timer and interrupts
-04CF D2AD       117       setb ET2  ; Enable timer 2 interrupt
-04D1 D2CA       118       setb TR2  ; Enable timer 2
-04D3 22         119            ret
-04D4            120   
-04D4            121   ; Configure the serial port and baud rate
-04D4            122   InitSerialPort:
-04D4            123       ; Since the reset button bounces, we need to wait a bit before
-04D4            124       ; sending messages, otherwise we risk displaying gibberish!
-04D4 79DE       125       mov R1, #222
-04D6 78A6       126       mov R0, #166
-04D8 D8FE       127       djnz R0, $   ; 3 cycles->3*45.21123ns*166=22.51519us
-04DA D9FA       128       djnz R1, $-4 ; 22.51519us*222=4.998ms
-04DC            129       ; Now we can proceed with the configuration
-04DC 438780     130            orl     PCON,#0x80
-04DF 759852     131            mov     SCON,#0x52
-04E2 759B00     132            mov     BDRCON,#0x00
-04E5 759AF4     133            mov     BRL,#BRG_VAL
-04E8 759B1E     134            mov     BDRCON,#0x1E ; BDRCON=BRR|TBCK|RBCK|SPD;
-04EB 22         135       ret
-04EC            136   
-04EC            137   INIT_SPI:
-04EC D2A2       138       setb MY_MISO    ; Make MISO an input pin
-04EE C2A3       139       clr MY_SCLK     ; For mode (0,0) SCLK is zero
-04F0 22         140       ret
-04F1            141   
-04F1            142   ;---------------------------------;
-04F1            143   ; ISR for timer 2                 ;
-04F1            144   ;---------------------------------;
-04F1            145   Timer2_ISR:
-04F1 C2CF       146            clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
-04F3 B290       147            cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
-04F5            148            
-04F5            149            ; The two registers used in the ISR must be saved in the stack
-04F5 C0E0       150            push acc
-04F7 C0D0       151            push psw
-04F9            152            
-04F9            153            ; Increment the 16-bit one mili second counter
-04F9 0530       154            inc Count1ms+0    ; Increment the low 8-bits first
-04FB E530       155            mov a, Count1ms+0 ; If the low 8-bits overflow, then increment high 8-bits
-04FD 7002       156            jnz Inc_Done
-04FF 0531       157            inc Count1ms+1
-0501            158   
-0501            159   Inc_Done:
-0501            160            ; Check if 1 second has passed
-0501 E530       161            mov a, Count1ms+0
-0503 B4FA18     162            cjne a, #low(250), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
-0506 E531       163            mov a, Count1ms+1
-0508 B40013     164            cjne a, #high(250), Timer2_ISR_done
-050B            165            
-050B            166            ; 1 second has passed. Set a flag so the main program knows
-050B D200       167            setb seconds_flag ; Let the main program know 1 second has passed
-050D E4         168            clr a
-050E F530       169            mov Count1ms+0, a
-0510 F531       170            mov Count1ms+1, a
-0512 0532       171       inc Count5s
-0514            172   
-0514            173   Inc_Done_a:
-0514            174       ; Check if 5 seconds has passed
-0514 E532       175       mov a, Count5s
-0516 B40505     176       cjne a, #5, Timer2_ISR_done
-0519            177       
-0519            178       ; 5 seconds have passed. Set a flag so the main program knows
-0519 D201       179       setb five_seconds_flag
-051B 753200     180       mov Count5s, #0
-051E            181   
-051E            182   Timer2_ISR_done:
-051E D0D0       183            pop psw
-0520 D0E0       184            pop acc
-0522 32         185            reti
-0523            186   
-0523            187   ;---------------------------------;
-0523            188   ; Main Program                    ;
-0523            189   ;---------------------------------;
-0523            190   MainProgram:
-0523 75817F     191       mov SP, #7FH ; Set the stack pointer to the begining of idata
-0526 D2AF       192       setb EA   ; Enable Global interrupts
-0528 75E600     193       mov P0M0, #0
-052B 75E700     194       mov P0M1, #0
-052E 75CE00     195       mov P2M0, #0
-0531 75CF00     196       mov P2M1, #0
-0534            197       
-0534 1204D4     198       lcall InitSerialPort
-0537 1204EC     199       lcall INIT_SPI
-053A            200   
-053A 120088     201       lcall LCD_4BIT
-053D 1204B9     202       lcall Timer2_Init
-0540            203   
-0540 C200       204       clr seconds_flag
-0542            205   
-0542 753000     206       mov count1ms+0, #0
-0545 753000     207       mov count1ms+0, #0
-0548            208       ; defualt soaktemp = 150
-0548 754096     209       mov soaktemp, #0x96
-054B            210       ; default reflowtemp = 240
-054B 7541F0     211       mov reflowtemp, #0xF0
-054E            212   
-054E 020821     213       ljmp setup ; jump to setup after reset
-0551            214   
-0551            215   ;-------------------------------------------------- STATE 0 --------------------------------------------------
-0551            216   ; idle state, reflow oven is off
-0551            217   State_0:
-0551            218       ; check state
-0551 30A4FD     219       jnb STATE_STABLE, $ ; wait for state to be stable
-0554 120415     220       lcall read_state
-0557 B4004C     221       cjne a, #0, State_1
-055A            222   
-055A            223       ; turn off the oven
-055A C295       224       clr OVEN_CTL_PIN
-055C            225   
-055C            226       ; temperature is set, TEMP_OK = 1
-055C D2A3       227       setb TEMP_OK
-055E            228   
-055E            229       ; display "OVEN OFF" message
-055E C0E0       230            push acc
-0560 7401       230            mov a, #1
-0562 14         230            dec a
-0563 1200BD     230            lcall ?Set_Cursor_2 ; Select column and row
-0566 D0E0       230            pop acc
-0568 C083       231            push dph
-056A C082       231            push dpl
-056C C0E0       231            push acc
-056E 9004A8     231            mov dptr, #OVEN_OFF
-0571 1200B2     231            lcall ?Send_Constant_String
-0574 D0E0       231            pop acc
-0576 D082       231            pop dpl
-0578 D083       231            pop dph
-057A            232   
-057A            233       ; [sound saying the current state "Idle"]
-057A            234   
-057A            235       ; if BOOT_BUTTON is being pressed, wait for release
-057A 30C5FD     236       jnb BOOT_BUTTON, $
-057D            237       
-057D            238   Idle:
-057D            239       ; check state
-057D 30A4FD     240       jnb STATE_STABLE, $ ; wait for state to be stable
-0580 120415     241       lcall read_state
-0583 B40020     242       cjne a, #0, State_1
-0586            243       ; Read tempurature every second
-0586 30000B     244       jnb seconds_flag, Idle_a
-0589 C200       245       clr seconds_flag
-058B 1203CE     246       lcall Read_ADC
-058E 120421     247       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-0591 120396     248       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
-0594            249   Idle_a:
-0594            250       ; if BOOT_BUTTON is pressed, jump to setup
-0594 20C5E6     251       jb BOOT_BUTTON, Idle
-0597 C002       252            push AR2
-0599 7A32       252            mov R2, #50
-059B 120039     252            lcall ?Wait_Milli_Seconds
-059E D002       252            pop AR2 ; debounce time
-05A0 20C5DA     253       jb BOOT_BUTTON, Idle
-05A3 020821     254       ljmp setup
-05A6            255   
-05A6            256   ;-------------------------------------------------- STATE 1 --------------------------------------------------
-05A6            257   ; heating to soak temperature
-05A6            258   State_1:
-05A6            259       ; check state
-05A6 30A4FD     260       jnb STATE_STABLE, $ ; wait for state to be stable
-05A9 120415     261       lcall read_state
-05AC B4015B     262       cjne a, #1, Jump_State_2 ; offset was too large for cjne to jump to State_2, branching to a ljmp
-05AF            263   
-05AF            264       ; turn on the oven
-05AF D295       265       setb OVEN_CTL_PIN
-05B1            266   
-05B1            267       ; display target temperature
-05B1 C0E0       268            push acc
-05B3 7401       268            mov a, #1
-05B5 14         268            dec a
-05B6 1200BD     268            lcall ?Set_Cursor_2 ; Select column and row
-05B9 D0E0       268            pop acc
-05BB C083       269            push dph
-05BD C082       269            push dpl
-05BF C0E0       269            push acc
-05C1 900497     269            mov dptr, #TARGET_TEMP
-05C4 1200B2     269            lcall ?Send_Constant_String
-05C7 D0E0       269            pop acc
-05C9 D082       269            pop dpl
-05CB D083       269            pop dph
-05CD 753300     270            mov x+0, #low (0 % 0x10000) 
-05D0 753400     270            mov x+1, #high(0 % 0x10000) 
-05D3 753500     270            mov x+2, #low (0 / 0x10000) 
-05D6 753600     270            mov x+3, #high(0 / 0x10000) 
-05D9 854033     271       mov x+0, soaktemp
-05DC 1200DA     272       lcall hex2bcd
-05DF C0E0       273            push acc
-05E1 7408       273            mov a, #8
-05E3 14         273            dec a
-05E4 1200BD     273            lcall ?Set_Cursor_2 ; Select column and row
-05E7 D0E0       273            pop acc
-05E9 C000       273            push ar0
-05EB A83C       273            mov r0, bcd+1
-05ED 1200C4     273            lcall ?Display_BCD
-05F0 D000       273            pop ar0
-05F2 C000       273            push ar0
-05F4 A83B       273            mov r0, bcd+0
-05F6 1200C4     273            lcall ?Display_BCD
-05F9 D000       273            pop ar0
-05FB            273            ; Replace all the zeros to the left with blanks
-05FB C0E0       273            push acc
-05FD 7408       273            mov a, #8
-05FF 14         273            dec a
-0600 1200BD     273            lcall ?Set_Cursor_2 ; Select column and row
-0603 D0E0       273            pop acc
-0605 12034A     273            lcall replace_zeros
-0608            274   
-0608            275       ; [Sound for saying the current state "Heating to soak"]
-0608 8003       276       sjmp Heating_To_Soak
-060A            277   
-060A            278   Jump_State_2:   ; ljmp to state 2
-060A 020652     279       ljmp State_2
-060D            280   
-060D            281   Heating_To_Soak:
-060D            282       ; read temperature every second
-060D 30000B     283       jnb seconds_flag, Heating_To_Soak_a
-0610 C200       284       clr seconds_flag
-0612 1203CE     285       lcall Read_ADC
-0615 120421     286       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-0618 120396     287       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
-061B            288   Heating_To_Soak_a:
-061B            289       ; play sound every five seconds
-061B 300102     290       jnb five_seconds_flag, Heating_To_Soak_b
-061E C201       291       clr five_seconds_flag
-0620            292       ; [function to play sound here]
-0620            293   Heating_To_Soak_b:
-0620            294       ; if temperature >= reflow temperature, TEMP_OK = 0
-0620            295       ; else 1
-0620 753300     296            mov x+0, #low (0 % 0x10000) 
-0623 753400     296            mov x+1, #high(0 % 0x10000) 
-0626 753500     296            mov x+2, #low (0 / 0x10000) 
-0629 753600     296            mov x+3, #high(0 / 0x10000) 
-062C 753700     297            mov y+0, #low (0 % 0x10000) 
-062F 753800     297            mov y+1, #high(0 % 0x10000) 
-0632 753900     297            mov y+2, #low (0 / 0x10000) 
-0635 753A00     297            mov y+3, #high(0 / 0x10000) 
-0638 854433     298       mov x+0, temp_reading
-063B 854037     299       mov y+0, soaktemp
-063E 120240     300       lcall x_gteq_y
-0641 300202     301       jnb mf, Heating_To_Soak_c
-0644 C2A3       302       clr TEMP_OK
-0646            303   Heating_To_Soak_c:
-0646            304       ; check state
-0646 30A4FD     305       jnb STATE_STABLE, $ ; wait for state to be stable
-0649 120415     306       lcall read_state
-064C B40103     307       cjne a, #1, State_2
-064F 02060D     308       ljmp Heating_To_Soak
-0652            309   
-0652            310   ;-------------------------------------------------- STATE 2 --------------------------------------------------
-0652            311   ; soak temperature has been reached, temperature is held for [soaktime]
-0652            312   State_2:
-0652            313       ; check state
-0652 30A4FD     314       jnb STATE_STABLE, $ ; wait for state to be stable
-0655 120415     315       lcall read_state
-0658 B40248     316       cjne a, #2, State_3
-065B            317   
-065B            318       ; [sound saying the current state "Soaking"]
-065B            319   
-065B            320   Soaking:
-065B            321       ; read temperature every second
-065B 30000B     322       jnb seconds_flag, Soaking_a
-065E C200       323       clr seconds_flag
-0660 1203CE     324       lcall Read_ADC
-0663 120421     325       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-0666 120396     326       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
-0669            327   Soaking_a:
-0669            328       ; play sound every five seconds
-0669 300102     329       jnb five_seconds_flag, Soaking_b
-066C C201       330       clr five_seconds_flag
-066E            331       ; [function to play sound here]
-066E            332   Soaking_b:
-066E            333       ; compare temperature to soaktemp
-066E 753300     334            mov x+0, #low (0 % 0x10000) 
-0671 753400     334            mov x+1, #high(0 % 0x10000) 
-0674 753500     334            mov x+2, #low (0 / 0x10000) 
-0677 753600     334            mov x+3, #high(0 / 0x10000) 
-067A 753700     335            mov y+0, #low (0 % 0x10000) 
-067D 753800     335            mov y+1, #high(0 % 0x10000) 
-0680 753900     335            mov y+2, #low (0 / 0x10000) 
-0683 753A00     335            mov y+3, #high(0 / 0x10000) 
-0686 854433     336       mov x+0, temp_reading
-0689 854037     337       mov y+0, soaktemp
-068C 120240     338       lcall x_gteq_y
-068F            339       ; if temperature >= soaktemp, turn off the oven
-068F 20020D     340       jb mf, Soaking_too_high
-0692            341       ; else, turn on the oven
-0692 D295       342       setb OVEN_CTL_PIN
-0694            343   Soaking_d:
-0694            344       ; check state
-0694 30A4FD     345       jnb STATE_STABLE, $ ; wait for state to be stable
-0697 120415     346       lcall read_state
-069A B40206     347       cjne a, #2, State_3
-069D 80BC       348       sjmp Soaking
-069F            349   
-069F            350   Soaking_too_high:
-069F C295       351       clr OVEN_CTL_PIN ; turn off the oven
-06A1 80F1       352       sjmp Soaking_d
-06A3            353   
-06A3            354   ;-------------------------------------------------- STATE 3 --------------------------------------------------
-06A3            355   ; heating to reflow temperature
-06A3            356   State_3:
-06A3            357       ; check state
-06A3 30A4FD     358       jnb STATE_STABLE, $ ; wait for state to be stable
-06A6 120415     359       lcall read_state
-06A9 B4033F     360       cjne a, #3, Jump_State_4
-06AC            361   
-06AC            362       ; turn on the oven
-06AC D295       363       setb OVEN_CTL_PIN
-06AE            364   
-06AE            365       ; display target temperature
-06AE 753300     366            mov x+0, #low (0 % 0x10000) 
-06B1 753400     366            mov x+1, #high(0 % 0x10000) 
-06B4 753500     366            mov x+2, #low (0 / 0x10000) 
-06B7 753600     366            mov x+3, #high(0 / 0x10000) 
-06BA 854133     367       mov x+0, reflowtemp
-06BD 1200DA     368       lcall hex2bcd
-06C0 C0E0       369            push acc
-06C2 7408       369            mov a, #8
-06C4 14         369            dec a
-06C5 1200BD     369            lcall ?Set_Cursor_2 ; Select column and row
-06C8 D0E0       369            pop acc
-06CA C000       369            push ar0
-06CC A83C       369            mov r0, bcd+1
-06CE 1200C4     369            lcall ?Display_BCD
-06D1 D000       369            pop ar0
-06D3 C000       369            push ar0
-06D5 A83B       369            mov r0, bcd+0
-06D7 1200C4     369            lcall ?Display_BCD
-06DA D000       369            pop ar0
-06DC            369            ; Replace all the zeros to the left with blanks
-06DC C0E0       369            push acc
-06DE 7408       369            mov a, #8
-06E0 14         369            dec a
-06E1 1200BD     369            lcall ?Set_Cursor_2 ; Select column and row
-06E4 D0E0       369            pop acc
-06E6 12034A     369            lcall replace_zeros
-06E9            370   
-06E9            371       ; [sound saying the current state "Heating to reflow"]
-06E9 8003       372       sjmp Heating_To_Reflow
-06EB            373   
-06EB            374   Jump_State_4:   ; ljmp to state 4
-06EB 020732     375       ljmp State_4
-06EE            376   
-06EE            377   Heating_To_Reflow:
-06EE            378       ; read temperature every second
-06EE 30000B     379       jnb seconds_flag, Heating_To_Reflow_a
-06F1 C200       380       clr seconds_flag
-06F3 1203CE     381       lcall Read_ADC
-06F6 120421     382       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-06F9 120396     383       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
-06FC            384   Heating_To_Reflow_a:
-06FC            385       ; play sound every five seconds
-06FC 300102     386       jnb five_seconds_flag, Heating_To_Reflow_b
-06FF C201       387       clr five_seconds_flag
-0701            388       ; [function to play sound here]
-0701            389   Heating_To_Reflow_b:
-0701 753300     390            mov x+0, #low (0 % 0x10000) 
-0704 753400     390            mov x+1, #high(0 % 0x10000) 
-0707 753500     390            mov x+2, #low (0 / 0x10000) 
-070A 753600     390            mov x+3, #high(0 / 0x10000) 
-070D 753700     391            mov y+0, #low (0 % 0x10000) 
-0710 753800     391            mov y+1, #high(0 % 0x10000) 
-0713 753900     391            mov y+2, #low (0 / 0x10000) 
-0716 753A00     391            mov y+3, #high(0 / 0x10000) 
-0719 854433     392       mov x+0, temp_reading
-071C 854037     393       mov y+0, soaktemp
-071F 120240     394       lcall x_gteq_y
-0722 300202     395       jnb mf, Heating_To_Reflow_c
-0725 D2A3       396       setb TEMP_OK
-0727            397   Heating_To_Reflow_c:
-0727            398       ; check state
-0727 30A4FD     399       jnb STATE_STABLE, $ ; wait for state to be stable
-072A 120415     400       lcall read_state
-072D B40302     401       cjne a, #3, State_4
-0730 80BC       402       sjmp Heating_To_Reflow
-0732            403   
-0732            404   ;-------------------------------------------------- STATE 4 --------------------------------------------------
-0732            405   ; reflow temperature has been reached, temperature is held for [reflowtime]
-0732            406   State_4:
-0732            407       ; check state
-0732 30A4FD     408       jnb STATE_STABLE, $ ; wait for state to be stable
-0735 120415     409       lcall read_state
-0738 B4044B     410       cjne a, #4, State_5
-073B            411   
-073B            412       ; [Sound saying the current state "Reflowing"]
-073B            413   
-073B            414   Reflowing:
-073B            415       ; read temperature every second
-073B 30000B     416       jnb seconds_flag, Reflowing_a
-073E C200       417       clr seconds_flag
-0740 1203CE     418       lcall Read_ADC
-0743 120421     419       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-0746 120396     420       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
-0749            421   Reflowing_a:
-0749            422       ; play sound every five seconds
-0749 300102     423       jnb five_seconds_flag, Reflowing_b
-074C C201       424       clr five_seconds_flag
-074E            425       ; [function to play sound here]
-074E            426   Reflowing_b:
-074E 753300     427            mov x+0, #low (0 % 0x10000) 
-0751 753400     427            mov x+1, #high(0 % 0x10000) 
-0754 753500     427            mov x+2, #low (0 / 0x10000) 
-0757 753600     427            mov x+3, #high(0 / 0x10000) 
-075A 753700     428            mov y+0, #low (0 % 0x10000) 
-075D 753800     428            mov y+1, #high(0 % 0x10000) 
-0760 753900     428            mov y+2, #low (0 / 0x10000) 
-0763 753A00     428            mov y+3, #high(0 / 0x10000) 
-0766 854433     429       mov x+0, temp_reading
-0769 854037     430       mov y+0, soaktemp
-076C 120240     431       lcall x_gteq_y
-076F 200210     432       jb mf, Reflowing_too_high
-0772            433       ; if temperature >= soaktemp, turn off the oven
-0772 20020D     434       jb mf, Reflowing_too_high
-0775            435       ; else, turn on the oven
-0775 D295       436       setb OVEN_CTL_PIN
-0777            437   Reflowing_d:
-0777            438       ; check state
-0777 30A4FD     439       jnb STATE_STABLE, $ ; wait for state to be stable
-077A 120415     440       lcall read_state
-077D B40406     441       cjne a, #4, State_5
-0780 80B9       442       sjmp Reflowing
-0782            443   
-0782            444   Reflowing_too_high:
-0782 C295       445       clr OVEN_CTL_PIN ; turn off the oven
-0784 80F1       446       sjmp Reflowing_d
-0786            447   
-0786            448   ;------------------------------------------------- STATE 5/6 -------------------------------------------------
-0786            449   ; cooldown/error
-0786            450   State_5:
-0786            451       ; check state
-0786 30A4FD     452       jnb STATE_STABLE, $ ; wait for state to be stable
-0789 120415     453       lcall read_state
-078C B40520     454       cjne a, #5, State_6
-078F            455   
-078F            456       ; turn off the oven
-078F C295       457       clr OVEN_CTL_PIN
-0791            458   
-0791            459       ; display "OVEN OFF" message
-0791 C0E0       460            push acc
-0793 7401       460            mov a, #1
-0795 14         460            dec a
-0796 1200BD     460            lcall ?Set_Cursor_2 ; Select column and row
-0799 D0E0       460            pop acc
-079B C083       461            push dph
-079D C082       461            push dpl
-079F C0E0       461            push acc
-07A1 9004A8     461            mov dptr, #OVEN_OFF
-07A4 1200B2     461            lcall ?Send_Constant_String
-07A7 D0E0       461            pop acc
-07A9 D082       461            pop dpl
-07AB D083       461            pop dph
-07AD            462   
-07AD            463       ; [Sound saying current state "Cooldown"]
-07AD 802C       464       sjmp Cooldown
-07AF            465   
-07AF            466   State_6:
-07AF            467       ; check state
-07AF 30A4FD     468       jnb STATE_STABLE, $ ; wait for state to be stable
-07B2 120415     469       lcall read_state
-07B5 B40620     470       cjne a, #6, Jump_State_0
-07B8            471   
-07B8            472       ; turn off the oven
-07B8 C295       473       clr OVEN_CTL_PIN
-07BA            474   
-07BA            475       ; display "OVEN OFF" message
-07BA C0E0       476            push acc
-07BC 7401       476            mov a, #1
-07BE 14         476            dec a
-07BF 1200BD     476            lcall ?Set_Cursor_2 ; Select column and row
-07C2 D0E0       476            pop acc
-07C4 C083       477            push dph
-07C6 C082       477            push dpl
-07C8 C0E0       477            push acc
-07CA 9004A8     477            mov dptr, #OVEN_OFF
-07CD 1200B2     477            lcall ?Send_Constant_String
-07D0 D0E0       477            pop acc
-07D2 D082       477            pop dpl
-07D4 D083       477            pop dph
-07D6            478   
-07D6            479       ; [Sound saying current state "Error"]
-07D6 8003       480       sjmp Cooldown
-07D8            481   
-07D8            482   Jump_State_0:
-07D8 020551     483       ljmp State_0
-07DB            484   
-07DB            485   Cooldown:
-07DB            486       ; read temperature every second
-07DB 30000B     487       jnb seconds_flag, Cooldown_a
-07DE C200       488       clr seconds_flag
-07E0 1203CE     489       lcall Read_ADC
-07E3 120421     490       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-07E6 120396     491       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
-07E9            492   Cooldown_a:
-07E9            493       ; play sound every five seconds
-07E9 300102     494       jnb five_seconds_flag, Cooldown_b
-07EC C201       495       clr five_seconds_flag
-07EE            496       ; [function to play sound here]
-07EE            497   Cooldown_b:
-07EE 753300     498            mov x+0, #low (0 % 0x10000) 
-07F1 753400     498            mov x+1, #high(0 % 0x10000) 
-07F4 753500     498            mov x+2, #low (0 / 0x10000) 
-07F7 753600     498            mov x+3, #high(0 / 0x10000) 
-07FA 753732     499            mov y+0, #low (50 % 0x10000) 
-07FD 753800     499            mov y+1, #high(50 % 0x10000) 
-0800 753900     499            mov y+2, #low (50 / 0x10000) 
-0803 753A00     499            mov y+3, #high(50 / 0x10000) 
-0806 854433     500       mov x+0, temp_reading
-0809 120240     501       lcall x_gteq_y
-080C 200202     502       jb mf, Cooldown_c
-080F C2A4       503       clr TEMP_50
-0811            504   Cooldown_c:
-0811            505       ; check state
-0811 30A4FD     506       jnb STATE_STABLE, $ ; wait for state to be stable
-0814 120415     507       lcall read_state
-0817 B40502     508       cjne a, #5, Cooldown_d
-081A 80BF       509       sjmp Cooldown
-081C            510   Cooldown_d:
-081C B406B9     511       cjne a, #6, Jump_State_0
-081F 80BA       512       sjmp Cooldown
-0821            513   
-0821            514   ;-------------------------------------------------- SETUP ----------------------------------------------------
-0821            515   setup:
-0821            516       ; temperature not set, TEMP_OK = 0
-0821 C2A3       517       clr TEMP_OK
-0823            518       ; prints "SOAK" left aligned in the top row
-0823 C0E0       519            push acc
-0825 7401       519            mov a, #1
-0827 14         519            dec a
-0828 1200BF     519            lcall ?Set_Cursor_1 ; Select column and row
-082B D0E0       519            pop acc
-082D C083       520            push dph
-082F C082       520            push dpl
-0831 C0E0       520            push acc
-0833 900464     520            mov dptr, #SOAK_TEMP
-0836 1200B2     520            lcall ?Send_Constant_String
-0839 D0E0       520            pop acc
-083B D082       520            pop dpl
-083D D083       520            pop dph
-083F            521       ; prints "REFLOW" left aligned in the bottom row
-083F C0E0       522            push acc
-0841 7401       522            mov a, #1
-0843 14         522            dec a
-0844 1200BD     522            lcall ?Set_Cursor_2 ; Select column and row
-0847 D0E0       522            pop acc
-0849 C083       523            push dph
-084B C082       523            push dpl
-084D C0E0       523            push acc
-084F 900475     523            mov dptr, #REFLOW_TEMP
-0852 1200B2     523            lcall ?Send_Constant_String
-0855 D0E0       523            pop acc
-0857 D082       523            pop dpl
-0859 D083       523            pop dph
-085B            524       ; display soak temperature
-085B 753300     525            mov x+0, #low (0 % 0x10000) 
-085E 753400     525            mov x+1, #high(0 % 0x10000) 
-0861 753500     525            mov x+2, #low (0 / 0x10000) 
-0864 753600     525            mov x+3, #high(0 / 0x10000) 
-0867 854033     526       mov x+0, soaktemp
-086A 1200DA     527       lcall hex2bcd
-086D C0E0       528            push acc
-086F 7408       528            mov a, #8
-0871 14         528            dec a
-0872 1200BF     528            lcall ?Set_Cursor_1 ; Select column and row
-0875 D0E0       528            pop acc
-0877 C000       528            push ar0
-0879 A83C       528            mov r0, bcd+1
-087B 1200C4     528            lcall ?Display_BCD
-087E D000       528            pop ar0
-0880 C000       528            push ar0
-0882 A83B       528            mov r0, bcd+0
-0884 1200C4     528            lcall ?Display_BCD
-0887 D000       528            pop ar0
-0889            528            ; Replace all the zeros to the left with blanks
-0889 C0E0       528            push acc
-088B 7408       528            mov a, #8
-088D 14         528            dec a
-088E 1200BF     528            lcall ?Set_Cursor_1 ; Select column and row
-0891 D0E0       528            pop acc
-0893 12034A     528            lcall replace_zeros
-0896            529       ; display reflow temperature
-0896 854133     530       mov x+0, reflowtemp+0
-0899 1200DA     531       lcall hex2bcd
-089C C0E0       532            push acc
-089E 7408       532            mov a, #8
-08A0 14         532            dec a
-08A1 1200BD     532            lcall ?Set_Cursor_2 ; Select column and row
-08A4 D0E0       532            pop acc
-08A6 C000       532            push ar0
-08A8 A83C       532            mov r0, bcd+1
-08AA 1200C4     532            lcall ?Display_BCD
-08AD D000       532            pop ar0
-08AF C000       532            push ar0
-08B1 A83B       532            mov r0, bcd+0
-08B3 1200C4     532            lcall ?Display_BCD
-08B6 D000       532            pop ar0
-08B8            532            ; Replace all the zeros to the left with blanks
-08B8 C0E0       532            push acc
-08BA 7408       532            mov a, #8
-08BC 14         532            dec a
-08BD 1200BD     532            lcall ?Set_Cursor_2 ; Select column and row
-08C0 D0E0       532            pop acc
-08C2 12034A     532            lcall replace_zeros
-08C5            533   
-08C5            534   ; set soak temperature
-08C5            535   ; MAX: 240
-08C5            536   ; MIN: 120
-08C5            537   set_soak_temp:
-08C5 854033     538       mov x+0, soaktemp
-08C8 C0E0       539            push acc
-08CA 740B       539            mov a, #11
-08CC 14         539            dec a
-08CD 1200BF     539            lcall ?Set_Cursor_1 ; Select column and row
-08D0 D0E0       539            pop acc
-08D2 C0E0       540            push acc
-08D4 740E       540            mov a, #0xE
-08D6 120083     540            lcall ?WriteCommand
-08D9 D0E0       540            pop acc
-08DB            541       ; if BOOT_BUTTON is being pressed, wait for release
-08DB 30C5FD     542       jnb BOOT_BUTTON, $
-08DE            543   set_soak_temp_a:
-08DE            544       ; if UP is pressed, increment temperature
-08DE 208505     545       jb UP, set_soak_temp_b
-08E1 E533       546       mov a, x+0
-08E3            547       ; if temperature < 240, increment temperature
-08E3 B4F032     548       cjne a, #0xF0, set_soak_temp_d
-08E6            549   set_soak_temp_b:
-08E6            550       ; if DOWN button is pressed, increment temperature  
-08E6 208705     551       jb DOWN, set_soak_temp_c
-08E9 E533       552       mov a, x+0
-08EB            553       ; if temperature > 120, decrement temperature
-08EB B4783A     554       cjne a, #0x78, set_soak_temp_e
-08EE            555   set_soak_temp_c:  
-08EE C203       556       clr hold_button
-08F0 C0E0       557            push acc
-08F2 740B       557            mov a, #11
-08F4 14         557            dec a
-08F5 1200BF     557            lcall ?Set_Cursor_1 ; Select column and row
-08F8 D0E0       557            pop acc
-08FA C0E0       558            push acc
-08FC 740E       558            mov a, #0xE
-08FE 120083     558            lcall ?WriteCommand
-0901 D0E0       558            pop acc
-0903            559       ; if BOOT_BUTTON is pressed, set reflow time
-0903 20C5D8     560       jb BOOT_BUTTON, set_soak_temp_a
-0906 C002       561            push AR2
-0908 7A32       561            mov R2, #50
-090A 120039     561            lcall ?Wait_Milli_Seconds
-090D D002       561            pop AR2 ; debounce time
-090F 20C5CC     562       jb BOOT_BUTTON, set_soak_temp_a
-0912 853340     563       mov soaktemp, x+0
-0915 0209D0     564       ljmp set_reflow_temp
-0918            565   set_soak_temp_d:
-0918            566       ; increment soak temperature
-0918 C0E0       567            push acc
-091A 740C       567            mov a, #0xC
-091C 120083     567            lcall ?WriteCommand
-091F D0E0       567            pop acc
-0921 0533       568       inc x+0
-0923            569       ; if UP is held, increment temperature rapidly
-0923 200312     570       jb hold_button, set_soak_temp_f
-0926 804D       571       sjmp set_soak_temp_g
-0928            572   set_soak_temp_e:
-0928            573       ; decrement soak temperature
-0928 C0E0       574            push acc
-092A 740C       574            mov a, #0xC
-092C 120083     574            lcall ?WriteCommand
-092F D0E0       574            pop acc
-0931 1533       575       dec x+0
-0933            576       ; if DOWN button is held, decrement temperature rapidly
-0933 200302     577       jb hold_button, set_soak_temp_f
-0936 803D       578       sjmp set_soak_temp_g
-0938            579   set_soak_temp_f:
-0938            580       ; update display and wait 25 ms
-0938 1200DA     581       lcall hex2bcd
-093B C0E0       582            push acc
-093D 7408       582            mov a, #8
-093F 14         582            dec a
-0940 1200BF     582            lcall ?Set_Cursor_1 ; Select column and row
-0943 D0E0       582            pop acc
-0945 C000       582            push ar0
-0947 A83C       582            mov r0, bcd+1
-0949 1200C4     582            lcall ?Display_BCD
-094C D000       582            pop ar0
-094E C000       582            push ar0
-0950 A83B       582            mov r0, bcd+0
-0952 1200C4     582            lcall ?Display_BCD
-0955 D000       582            pop ar0
-0957            582            ; Replace all the zeros to the left with blanks
-0957 C0E0       582            push acc
-0959 7408       582            mov a, #8
-095B 14         582            dec a
-095C 1200BF     582            lcall ?Set_Cursor_1 ; Select column and row
-095F D0E0       582            pop acc
-0961 12034A     582            lcall replace_zeros
-0964 C002       583            push AR2
-0966 7A19       583            mov R2, #25
-0968 120039     583            lcall ?Wait_Milli_Seconds
-096B D002       583            pop AR2
-096D            584       ; if UP is held, increment temperature
-096D 308556     585       jnb UP, set_soak_temp_h
-0970            586       ; if DOWN button is held, decrement temperature
-0970 308758     587       jnb DOWN, set_soak_temp_i
-0973 C203       588       clr hold_button
-0975            589   set_soak_temp_g:
-0975            590       ; update display and wait 250 ms
-0975 1200DA     591       lcall hex2bcd
-0978 C0E0       592            push acc
-097A 7408       592            mov a, #8
-097C 14         592            dec a
-097D 1200BF     592            lcall ?Set_Cursor_1 ; Select column and row
-0980 D0E0       592            pop acc
-0982 C000       592            push ar0
-0984 A83C       592            mov r0, bcd+1
-0986 1200C4     592            lcall ?Display_BCD
-0989 D000       592            pop ar0
-098B C000       592            push ar0
-098D A83B       592            mov r0, bcd+0
-098F 1200C4     592            lcall ?Display_BCD
-0992 D000       592            pop ar0
-0994            592            ; Replace all the zeros to the left with blanks
-0994 C0E0       592            push acc
-0996 7408       592            mov a, #8
-0998 14         592            dec a
-0999 1200BF     592            lcall ?Set_Cursor_1 ; Select column and row
-099C D0E0       592            pop acc
-099E 12034A     592            lcall replace_zeros
-09A1 C0E0       593            push acc
-09A3 740B       593            mov a, #11
-09A5 14         593            dec a
-09A6 1200BF     593            lcall ?Set_Cursor_1 ; Select column and row
-09A9 D0E0       593            pop acc
-09AB C0E0       594            push acc
-09AD 740E       594            mov a, #0xE
-09AF 120083     594            lcall ?WriteCommand
-09B2 D0E0       594            pop acc
-09B4 C002       595            push AR2
-09B6 7AFA       595            mov R2, #250
-09B8 120039     595            lcall ?Wait_Milli_Seconds
-09BB D002       595            pop AR2
-09BD            596       ; if UP is held, set a flag so the program knows
-09BD 308506     597       jnb UP, set_soak_temp_h
-09C0            598       ; if DOWN button is held, set a flag so the program knows 
-09C0 308708     599       jnb DOWN, set_soak_temp_i
-09C3 0208DE     600       ljmp set_soak_temp_a
-09C6            601   set_soak_temp_h:
-09C6 D203       602       setb hold_button
-09C8 0208DE     603       ljmp set_soak_temp_a
-09CB            604   set_soak_temp_i:
-09CB D203       605       setb hold_button
-09CD 0208E6     606       ljmp set_soak_temp_b
-09D0            607   
-09D0            608   ; set reflow temp
-09D0            609   ; MAX: 240
-09D0            610   ; MIN: 120
-09D0            611   set_reflow_temp:
-09D0 854133     612       mov x+0, reflowtemp
-09D3 C0E0       613            push acc
-09D5 740B       613            mov a, #11
-09D7 14         613            dec a
-09D8 1200BD     613            lcall ?Set_Cursor_2 ; Select column and row
-09DB D0E0       613            pop acc
-09DD C0E0       614            push acc
-09DF 740E       614            mov a, #0xE
-09E1 120083     614            lcall ?WriteCommand
-09E4 D0E0       614            pop acc
-09E6            615       ; if BOOT_BUTTON is being pressed, wait for release
-09E6 30C5FD     616       jnb BOOT_BUTTON, $
-09E9            617   set_reflow_temp_a:
-09E9            618       ; if UP is pressed, increment temperature
-09E9 208505     619       jb UP, set_reflow_temp_b
-09EC E533       620       mov a, x+0
-09EE            621       ; if temperature < 240, increment temperature
-09EE B4F032     622       cjne a, #0xF0, set_reflow_temp_d
-09F1            623   set_reflow_temp_b:
-09F1            624       ; if DOWN button is pressed, increment temperature  
-09F1 208705     625       jb DOWN, set_reflow_temp_c
-09F4 E533       626       mov a, x+0
-09F6            627       ; if temperature > 0, decrement temperature
-09F6 B4783A     628       cjne a, #0x78, set_reflow_temp_e
-09F9            629   set_reflow_temp_c:  
-09F9 C203       630       clr hold_button
-09FB C0E0       631            push acc
-09FD 740B       631            mov a, #11
-09FF 14         631            dec a
-0A00 1200BD     631            lcall ?Set_Cursor_2 ; Select column and row
-0A03 D0E0       631            pop acc
-0A05 C0E0       632            push acc
-0A07 740E       632            mov a, #0xE
-0A09 120083     632            lcall ?WriteCommand
-0A0C D0E0       632            pop acc
-0A0E            633       ; if BOOT_BUTTON is pressed, set reflow time
-0A0E 20C5D8     634       jb BOOT_BUTTON, set_reflow_temp_a
-0A11 C002       635            push AR2
-0A13 7A32       635            mov R2, #50
-0A15 120039     635            lcall ?Wait_Milli_Seconds
-0A18 D002       635            pop AR2 ; debounce time
-0A1A 20C5CC     636       jb BOOT_BUTTON, set_reflow_temp_a
-0A1D 853341     637       mov reflowtemp, x+0
-0A20 020ADB     638       ljmp setup_done
-0A23            639   set_reflow_temp_d:
-0A23            640       ; increment reflow temperature
-0A23 C0E0       641            push acc
-0A25 740C       641            mov a, #0xC
-0A27 120083     641            lcall ?WriteCommand
-0A2A D0E0       641            pop acc
-0A2C 0533       642       inc x+0
-0A2E            643       ; if UP is held, increment temperature rapidly
-0A2E 200312     644       jb hold_button, set_reflow_temp_f
-0A31 804D       645       sjmp set_reflow_temp_g
-0A33            646   set_reflow_temp_e:
-0A33            647       ; decrement reflow temperature
-0A33 C0E0       648            push acc
-0A35 740C       648            mov a, #0xC
-0A37 120083     648            lcall ?WriteCommand
-0A3A D0E0       648            pop acc
-0A3C 1533       649       dec x+0
-0A3E            650       ; if DOWN button is held, decrement temperature rapidly
-0A3E 200302     651       jb hold_button, set_reflow_temp_f
-0A41 803D       652       sjmp set_reflow_temp_g
-0A43            653   set_reflow_temp_f:
-0A43            654       ; update display and wait 25 ms
-0A43 1200DA     655       lcall hex2bcd
-0A46 C0E0       656            push acc
-0A48 7408       656            mov a, #8
-0A4A 14         656            dec a
-0A4B 1200BD     656            lcall ?Set_Cursor_2 ; Select column and row
-0A4E D0E0       656            pop acc
-0A50 C000       656            push ar0
-0A52 A83C       656            mov r0, bcd+1
-0A54 1200C4     656            lcall ?Display_BCD
-0A57 D000       656            pop ar0
-0A59 C000       656            push ar0
-0A5B A83B       656            mov r0, bcd+0
-0A5D 1200C4     656            lcall ?Display_BCD
-0A60 D000       656            pop ar0
-0A62            656            ; Replace all the zeros to the left with blanks
-0A62 C0E0       656            push acc
-0A64 7408       656            mov a, #8
-0A66 14         656            dec a
-0A67 1200BD     656            lcall ?Set_Cursor_2 ; Select column and row
-0A6A D0E0       656            pop acc
-0A6C 12034A     656            lcall replace_zeros
-0A6F C002       657            push AR2
-0A71 7A19       657            mov R2, #25
-0A73 120039     657            lcall ?Wait_Milli_Seconds
-0A76 D002       657            pop AR2
-0A78            658       ; if UP is held, increment temperature
-0A78 308556     659       jnb UP, set_reflow_temp_h
-0A7B            660       ; if DOWN button is held, decrement temperature
-0A7B 308758     661       jnb DOWN, set_reflow_temp_i
-0A7E C203       662       clr hold_button
-0A80            663   set_reflow_temp_g:
-0A80            664       ; update display and wait 250 ms
-0A80 1200DA     665       lcall hex2bcd
-0A83 C0E0       666            push acc
-0A85 7408       666            mov a, #8
-0A87 14         666            dec a
-0A88 1200BD     666            lcall ?Set_Cursor_2 ; Select column and row
-0A8B D0E0       666            pop acc
-0A8D C000       666            push ar0
-0A8F A83C       666            mov r0, bcd+1
-0A91 1200C4     666            lcall ?Display_BCD
-0A94 D000       666            pop ar0
-0A96 C000       666            push ar0
-0A98 A83B       666            mov r0, bcd+0
-0A9A 1200C4     666            lcall ?Display_BCD
-0A9D D000       666            pop ar0
-0A9F            666            ; Replace all the zeros to the left with blanks
-0A9F C0E0       666            push acc
-0AA1 7408       666            mov a, #8
-0AA3 14         666            dec a
-0AA4 1200BD     666            lcall ?Set_Cursor_2 ; Select column and row
-0AA7 D0E0       666            pop acc
-0AA9 12034A     666            lcall replace_zeros
-0AAC C0E0       667            push acc
-0AAE 740B       667            mov a, #11
-0AB0 14         667            dec a
-0AB1 1200BD     667            lcall ?Set_Cursor_2 ; Select column and row
-0AB4 D0E0       667            pop acc
-0AB6 C0E0       668            push acc
-0AB8 740E       668            mov a, #0xE
-0ABA 120083     668            lcall ?WriteCommand
-0ABD D0E0       668            pop acc
-0ABF C002       669            push AR2
-0AC1 7AFA       669            mov R2, #250
-0AC3 120039     669            lcall ?Wait_Milli_Seconds
-0AC6 D002       669            pop AR2
-0AC8            670       ; if UP is held, set a flag so the program knows
-0AC8 308506     671       jnb UP, set_reflow_temp_h
-0ACB            672       ; if DOWN button is held, set a flag so the program knows 
-0ACB 308708     673       jnb DOWN, set_reflow_temp_i
-0ACE 0209E9     674       ljmp set_reflow_temp_a
-0AD1            675   set_reflow_temp_h:
-0AD1 D203       676       setb hold_button
-0AD3 0209E9     677       ljmp set_reflow_temp_a
-0AD6            678   set_reflow_temp_i:
-0AD6 D203       679       setb hold_button
-0AD8 0209F1     680       ljmp set_reflow_temp_b
-0ADB            681   
-0ADB            682   setup_done:
-0ADB C0E0       683            push acc
-0ADD 740C       683            mov a, #0xC
-0ADF 120083     683            lcall ?WriteCommand
-0AE2 D0E0       683            pop acc
-0AE4            684       ; display current temperature
-0AE4 C0E0       685            push acc
-0AE6 7401       685            mov a, #1
-0AE8 14         685            dec a
-0AE9 1200BF     685            lcall ?Set_Cursor_1 ; Select column and row
-0AEC D0E0       685            pop acc
-0AEE C083       686            push dph
-0AF0 C082       686            push dpl
-0AF2 C0E0       686            push acc
-0AF4 900486     686            mov dptr, #CURRENT_TEMP
-0AF7 1200B2     686            lcall ?Send_Constant_String
-0AFA D0E0       686            pop acc
-0AFC D082       686            pop dpl
-0AFE D083       686            pop dph
-0B00 1203CE     687       lcall Read_ADC
-0B03 120421     688       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-0B06 120396     689       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
-0B09 020551     690       ljmp State_0
+0506             98   
+0506             99   ;---------------------------------;
+0506            100   ; Routine to initialize the ISR   ;
+0506            101   ; for timer 2                     ;
+0506            102   ;---------------------------------;
+0506            103   Timer2_Init:
+0506 75C800     104            mov T2CON, #0 ; Stop timer/counter.  Autoreload mode.
+0509 75CDA9     105            mov TH2, #high(TIMER2_RELOAD)
+050C 75CC9A     106            mov TL2, #low(TIMER2_RELOAD)
+050F            107            ; Set the reload value
+050F 75CBA9     108            mov RCAP2H, #high(TIMER2_RELOAD)
+0512 75CA9A     109            mov RCAP2L, #low(TIMER2_RELOAD)
+0515            110            ; Init one millisecond interrupt counter.  It is a 16-bit variable made with two 8-bit parts
+0515 E4         111            clr a
+0516 F530       112            mov Count1ms+0, a
+0518 F531       113            mov Count1ms+1, a
+051A            114       ; Init five second interrupt counter
+051A F532       115       mov Count5s, a
+051C            116            ; Enable the timer and interrupts
+051C D2AD       117       setb ET2  ; Enable timer 2 interrupt
+051E D2CA       118       setb TR2  ; Enable timer 2
+0520 22         119            ret
+0521            120   
+0521            121   ; Configure the serial port and baud rate
+0521            122   InitSerialPort:
+0521            123       ; Since the reset button bounces, we need to wait a bit before
+0521            124       ; sending messages, otherwise we risk displaying gibberish!
+0521 79DE       125       mov R1, #222
+0523 78A6       126       mov R0, #166
+0525 D8FE       127       djnz R0, $   ; 3 cycles->3*45.21123ns*166=22.51519us
+0527 D9FA       128       djnz R1, $-4 ; 22.51519us*222=4.998ms
+0529            129       ; Now we can proceed with the configuration
+0529 438780     130            orl     PCON,#0x80
+052C 759852     131            mov     SCON,#0x52
+052F 759B00     132            mov     BDRCON,#0x00
+0532 759AF4     133            mov     BRL,#BRG_VAL
+0535 759B1E     134            mov     BDRCON,#0x1E ; BDRCON=BRR|TBCK|RBCK|SPD;
+0538 22         135       ret
+0539            136   
+0539            137   INIT_SPI:
+0539 D282       138       setb MY_MISO    ; Make MISO an input pin
+053B C281       139       clr MY_SCLK     ; For mode (0,0) SCLK is zero
+053D 22         140       ret
+053E            141   
+053E            142   ;---------------------------------;
+053E            143   ; ISR for timer 2                 ;
+053E            144   ;---------------------------------;
+053E            145   Timer2_ISR:
+053E C2CF       146            clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
+0540            147            ;cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
+0540            148            
+0540            149            ; The two registers used in the ISR must be saved in the stack
+0540 C0E0       150            push acc
+0542 C0D0       151            push psw
+0544            152            
+0544            153            ; Increment the 16-bit one mili second counter
+0544 0530       154            inc Count1ms+0    ; Increment the low 8-bits first
+0546 E530       155            mov a, Count1ms+0 ; If the low 8-bits overflow, then increment high 8-bits
+0548 7002       156            jnz Inc_Done
+054A 0531       157            inc Count1ms+1
+054C            158   
+054C            159   Inc_Done:
+054C            160            ; Check if 1 second has passed
+054C E530       161            mov a, Count1ms+0
+054E B4FA18     162            cjne a, #low(250), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
+0551 E531       163            mov a, Count1ms+1
+0553 B40013     164            cjne a, #high(250), Timer2_ISR_done
+0556            165            
+0556            166            ; 1 second has passed. Set a flag so the main program knows
+0556 D200       167            setb seconds_flag ; Let the main program know 1 second has passed
+0558 E4         168            clr a
+0559 F530       169            mov Count1ms+0, a
+055B F531       170            mov Count1ms+1, a
+055D 0532       171       inc Count5s
+055F            172   
+055F            173   Inc_Done_a:
+055F            174       ; Check if 5 seconds has passed
+055F E532       175       mov a, Count5s
+0561 B40505     176       cjne a, #5, Timer2_ISR_done
+0564            177       
+0564            178       ; 5 seconds have passed. Set a flag so the main program knows
+0564 D201       179       setb five_seconds_flag
+0566 753200     180       mov Count5s, #0
+0569            181   
+0569            182   Timer2_ISR_done:
+0569 D0D0       183            pop psw
+056B D0E0       184            pop acc
+056D 32         185            reti
+056E            186   
+056E            187   ;---------------------------------;
+056E            188   ; Main Program                    ;
+056E            189   ;---------------------------------;
+056E            190   MainProgram:
+056E 75817F     191       mov SP, #7FH ; Set the stack pointer to the begining of idata
+0571 D2AF       192       setb EA   ; Enable Global interrupts
+0573 75E600     193       mov P0M0, #0
+0576 75E700     194       mov P0M1, #0
+0579 75D600     195       mov P1M0, #0
+057C 75D700     196       mov P1M1, #0
+057F 75CE00     197       mov P2M0, #0
+0582 75CF00     198       mov P2M1, #0
+0585            199       
+0585 120521     200       lcall InitSerialPort
+0588 120539     201       lcall INIT_SPI
+058B            202   
+058B 120088     203       lcall LCD_4BIT
+058E 120506     204       lcall Timer2_Init
+0591            205   
+0591 D292       206       setb STATE_bit0
+0593 D293       207       setb STATE_bit1
+0595 D294       208       setb STATE_bit2
+0597 D295       209       setb STATE_STABLE
+0599            210   
+0599 C290       211       clr TEMP_OK
+059B C291       212       clr TEMP_50
+059D C296       213       clr OVEN_CTL_PIN
+059F            214   
+059F C200       215       clr seconds_flag
+05A1 C201       216       clr five_seconds_flag
+05A3 C203       217       clr hold_button
+05A5            218   
+05A5 753000     219       mov count1ms+0, #0
+05A8 753000     220       mov count1ms+0, #0
+05AB            221       ; defualt soaktemp = 150
+05AB 754096     222       mov soaktemp, #0x96
+05AE            223       ; default reflowtemp = 240
+05AE 7541F0     224       mov reflowtemp, #0xF0
+05B1            225   
+05B1 02088A     226       ljmp setup ; jump to setup after reset
+05B4            227   
+05B4            228   ;-------------------------------------------------- STATE 0 --------------------------------------------------
+05B4            229   ; idle state, reflow oven is off
+05B4            230   State_0:
+05B4            231       ; check state
+05B4 3095FD     232       jnb STATE_STABLE, $ ; wait for state to be stable
+05B7 12043E     233       lcall read_state
+05BA B4004C     234       cjne a, #0, State_1
+05BD            235   
+05BD            236       ; turn off the oven
+05BD C296       237       clr OVEN_CTL_PIN
+05BF            238   
+05BF            239       ; temperature is set, TEMP_OK = 1
+05BF D290       240       setb TEMP_OK
+05C1            241   
+05C1            242       ; display "OVEN OFF" message
+05C1 C0E0       243            push acc
+05C3 7401       243            mov a, #1
+05C5 14         243            dec a
+05C6 1200BD     243            lcall ?Set_Cursor_2 ; Select column and row
+05C9 D0E0       243            pop acc
+05CB C083       244            push dph
+05CD C082       244            push dpl
+05CF C0E0       244            push acc
+05D1 9004F5     244            mov dptr, #OVEN_OFF
+05D4 1200B2     244            lcall ?Send_Constant_String
+05D7 D0E0       244            pop acc
+05D9 D082       244            pop dpl
+05DB D083       244            pop dph
+05DD            245   
+05DD            246       ; [sound saying the current state "Idle"]
+05DD            247   
+05DD            248       ; if BOOT_BUTTON is being pressed, wait for release
+05DD 30C5FD     249       jnb BOOT_BUTTON, $
+05E0            250       
+05E0            251   Idle:
+05E0            252       ; check state
+05E0 3095FD     253       jnb STATE_STABLE, $ ; wait for state to be stable
+05E3 12043E     254       lcall read_state
+05E6 B40020     255       cjne a, #0, State_1
+05E9            256       ; Read tempurature every second
+05E9 30000B     257       jnb seconds_flag, Idle_a
+05EC C200       258       clr seconds_flag
+05EE 1203F7     259       lcall Read_ADC
+05F1 12044A     260       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+05F4 120396     261       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+05F7            262   Idle_a:
+05F7            263       ; if BOOT_BUTTON is pressed, jump to setup
+05F7 20C5E6     264       jb BOOT_BUTTON, Idle
+05FA C002       265            push AR2
+05FC 7A32       265            mov R2, #50
+05FE 120039     265            lcall ?Wait_Milli_Seconds
+0601 D002       265            pop AR2 ; debounce time
+0603 20C5DA     266       jb BOOT_BUTTON, Idle
+0606 02088A     267       ljmp setup
+0609            268   
+0609            269   ;-------------------------------------------------- STATE 1 --------------------------------------------------
+0609            270   ; heating to soak temperature
+0609            271   State_1:
+0609            272       ; check state
+0609 3095FD     273       jnb STATE_STABLE, $ ; wait for state to be stable
+060C 12043E     274       lcall read_state
+060F B4015B     275       cjne a, #1, Jump_State_2 ; offset was too large for cjne to jump to State_2, branching to a ljmp
+0612            276   
+0612            277       ; turn on the oven
+0612 D296       278       setb OVEN_CTL_PIN
+0614            279   
+0614            280       ; display target temperature
+0614 C0E0       281            push acc
+0616 7401       281            mov a, #1
+0618 14         281            dec a
+0619 1200BD     281            lcall ?Set_Cursor_2 ; Select column and row
+061C D0E0       281            pop acc
+061E C083       282            push dph
+0620 C082       282            push dpl
+0622 C0E0       282            push acc
+0624 9004E4     282            mov dptr, #TARGET_TEMP
+0627 1200B2     282            lcall ?Send_Constant_String
+062A D0E0       282            pop acc
+062C D082       282            pop dpl
+062E D083       282            pop dph
+0630 753300     283            mov x+0, #low (0 % 0x10000) 
+0633 753400     283            mov x+1, #high(0 % 0x10000) 
+0636 753500     283            mov x+2, #low (0 / 0x10000) 
+0639 753600     283            mov x+3, #high(0 / 0x10000) 
+063C 854033     284       mov x+0, soaktemp
+063F 1200DA     285       lcall hex2bcd
+0642 C0E0       286            push acc
+0644 7408       286            mov a, #8
+0646 14         286            dec a
+0647 1200BD     286            lcall ?Set_Cursor_2 ; Select column and row
+064A D0E0       286            pop acc
+064C C000       286            push ar0
+064E A83C       286            mov r0, bcd+1
+0650 1200C4     286            lcall ?Display_BCD
+0653 D000       286            pop ar0
+0655 C000       286            push ar0
+0657 A83B       286            mov r0, bcd+0
+0659 1200C4     286            lcall ?Display_BCD
+065C D000       286            pop ar0
+065E            286            ; Replace all the zeros to the left with blanks
+065E C0E0       286            push acc
+0660 7408       286            mov a, #8
+0662 14         286            dec a
+0663 1200BD     286            lcall ?Set_Cursor_2 ; Select column and row
+0666 D0E0       286            pop acc
+0668 12034A     286            lcall replace_zeros
+066B            287   
+066B            288       ; [Sound for saying the current state "Heating to soak"]
+066B 8003       289       sjmp Heating_To_Soak
+066D            290   
+066D            291   Jump_State_2:   ; ljmp to state 2
+066D 0206B8     292       ljmp State_2
+0670            293   
+0670            294   Heating_To_Soak:
+0670            295       ; read temperature every second
+0670 30000B     296       jnb seconds_flag, Heating_To_Soak_a
+0673 C200       297       clr seconds_flag
+0675 1203F7     298       lcall Read_ADC
+0678 12044A     299       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+067B 120396     300       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+067E            301   Heating_To_Soak_a:
+067E            302       ; play sound every five seconds
+067E 300102     303       jnb five_seconds_flag, Heating_To_Soak_b
+0681 C201       304       clr five_seconds_flag
+0683            305       ; [function to play sound here]
+0683            306   Heating_To_Soak_b:
+0683            307       ; if temperature >= reflow temperature, TEMP_OK = 0
+0683            308       ; else 1
+0683 753300     309            mov x+0, #low (0 % 0x10000) 
+0686 753400     309            mov x+1, #high(0 % 0x10000) 
+0689 753500     309            mov x+2, #low (0 / 0x10000) 
+068C 753600     309            mov x+3, #high(0 / 0x10000) 
+068F 753700     310            mov y+0, #low (0 % 0x10000) 
+0692 753800     310            mov y+1, #high(0 % 0x10000) 
+0695 753900     310            mov y+2, #low (0 / 0x10000) 
+0698 753A00     310            mov y+3, #high(0 / 0x10000) 
+069B 854433     311       mov x+0, temp_reading
+069E 854037     312       mov y+0, soaktemp
+06A1 120240     313       lcall x_gteq_y
+06A4 300202     314       jnb mf, Heating_To_Soak_c
+06A7 C290       315       clr TEMP_OK
+06A9            316   Heating_To_Soak_c:
+06A9            317       ; if temperature >= 50, TEMP_50 = 1
+06A9            318       ; else, TEMP_50 = 0
+06A9 12048A     319       lcall Check_50
+06AC            320       ; check state
+06AC 3095FD     321       jnb STATE_STABLE, $ ; wait for state to be stable
+06AF 12043E     322       lcall read_state
+06B2 B40103     323       cjne a, #1, State_2
+06B5 020670     324       ljmp Heating_To_Soak
+06B8            325   
+06B8            326   ;-------------------------------------------------- STATE 2 --------------------------------------------------
+06B8            327   ; soak temperature has been reached, temperature is held for [soaktime]
+06B8            328   State_2:
+06B8            329       ; check state
+06B8 3095FD     330       jnb STATE_STABLE, $ ; wait for state to be stable
+06BB 12043E     331       lcall read_state
+06BE B40248     332       cjne a, #2, State_3
+06C1            333   
+06C1            334       ; [sound saying the current state "Soaking"]
+06C1            335   
+06C1            336   Soaking:
+06C1            337       ; read temperature every second
+06C1 30000B     338       jnb seconds_flag, Soaking_a
+06C4 C200       339       clr seconds_flag
+06C6 1203F7     340       lcall Read_ADC
+06C9 12044A     341       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+06CC 120396     342       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+06CF            343   Soaking_a:
+06CF            344       ; play sound every five seconds
+06CF 300102     345       jnb five_seconds_flag, Soaking_b
+06D2 C201       346       clr five_seconds_flag
+06D4            347       ; [function to play sound here]
+06D4            348   Soaking_b:
+06D4            349       ; compare temperature to soaktemp
+06D4 753300     350            mov x+0, #low (0 % 0x10000) 
+06D7 753400     350            mov x+1, #high(0 % 0x10000) 
+06DA 753500     350            mov x+2, #low (0 / 0x10000) 
+06DD 753600     350            mov x+3, #high(0 / 0x10000) 
+06E0 753700     351            mov y+0, #low (0 % 0x10000) 
+06E3 753800     351            mov y+1, #high(0 % 0x10000) 
+06E6 753900     351            mov y+2, #low (0 / 0x10000) 
+06E9 753A00     351            mov y+3, #high(0 / 0x10000) 
+06EC 854433     352       mov x+0, temp_reading
+06EF 854037     353       mov y+0, soaktemp
+06F2 120240     354       lcall x_gteq_y
+06F5            355       ; if temperature >= soaktemp, turn off the oven
+06F5 20020D     356       jb mf, Soaking_too_high
+06F8            357       ; else, turn on the oven
+06F8 D296       358       setb OVEN_CTL_PIN
+06FA            359   Soaking_d:
+06FA            360       ; check state
+06FA 3095FD     361       jnb STATE_STABLE, $ ; wait for state to be stable
+06FD 12043E     362       lcall read_state
+0700 B40206     363       cjne a, #2, State_3
+0703 80BC       364       sjmp Soaking
+0705            365   
+0705            366   Soaking_too_high:
+0705 C296       367       clr OVEN_CTL_PIN ; turn off the oven
+0707 80F1       368       sjmp Soaking_d
+0709            369   
+0709            370   ;-------------------------------------------------- STATE 3 --------------------------------------------------
+0709            371   ; heating to reflow temperature
+0709            372   State_3:
+0709            373       ; check state
+0709 3095FD     374       jnb STATE_STABLE, $ ; wait for state to be stable
+070C 12043E     375       lcall read_state
+070F B4033F     376       cjne a, #3, Jump_State_4
+0712            377   
+0712            378       ; turn on the oven
+0712 D296       379       setb OVEN_CTL_PIN
+0714            380   
+0714            381       ; display target temperature
+0714 753300     382            mov x+0, #low (0 % 0x10000) 
+0717 753400     382            mov x+1, #high(0 % 0x10000) 
+071A 753500     382            mov x+2, #low (0 / 0x10000) 
+071D 753600     382            mov x+3, #high(0 / 0x10000) 
+0720 854133     383       mov x+0, reflowtemp
+0723 1200DA     384       lcall hex2bcd
+0726 C0E0       385            push acc
+0728 7408       385            mov a, #8
+072A 14         385            dec a
+072B 1200BD     385            lcall ?Set_Cursor_2 ; Select column and row
+072E D0E0       385            pop acc
+0730 C000       385            push ar0
+0732 A83C       385            mov r0, bcd+1
+0734 1200C4     385            lcall ?Display_BCD
+0737 D000       385            pop ar0
+0739 C000       385            push ar0
+073B A83B       385            mov r0, bcd+0
+073D 1200C4     385            lcall ?Display_BCD
+0740 D000       385            pop ar0
+0742            385            ; Replace all the zeros to the left with blanks
+0742 C0E0       385            push acc
+0744 7408       385            mov a, #8
+0746 14         385            dec a
+0747 1200BD     385            lcall ?Set_Cursor_2 ; Select column and row
+074A D0E0       385            pop acc
+074C 12034A     385            lcall replace_zeros
+074F            386   
+074F            387       ; [sound saying the current state "Heating to reflow"]
+074F 8003       388       sjmp Heating_To_Reflow
+0751            389   
+0751            390   Jump_State_4:   ; ljmp to state 4
+0751 020798     391       ljmp State_4
+0754            392   
+0754            393   Heating_To_Reflow:
+0754            394       ; read temperature every second
+0754 30000B     395       jnb seconds_flag, Heating_To_Reflow_a
+0757 C200       396       clr seconds_flag
+0759 1203F7     397       lcall Read_ADC
+075C 12044A     398       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+075F 120396     399       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+0762            400   Heating_To_Reflow_a:
+0762            401       ; play sound every five seconds
+0762 300102     402       jnb five_seconds_flag, Heating_To_Reflow_b
+0765 C201       403       clr five_seconds_flag
+0767            404       ; [function to play sound here]
+0767            405   Heating_To_Reflow_b:
+0767 753300     406            mov x+0, #low (0 % 0x10000) 
+076A 753400     406            mov x+1, #high(0 % 0x10000) 
+076D 753500     406            mov x+2, #low (0 / 0x10000) 
+0770 753600     406            mov x+3, #high(0 / 0x10000) 
+0773 753700     407            mov y+0, #low (0 % 0x10000) 
+0776 753800     407            mov y+1, #high(0 % 0x10000) 
+0779 753900     407            mov y+2, #low (0 / 0x10000) 
+077C 753A00     407            mov y+3, #high(0 / 0x10000) 
+077F 854433     408       mov x+0, temp_reading
+0782 854137     409       mov y+0, reflowtemp
+0785 120240     410       lcall x_gteq_y
+0788 300202     411       jnb mf, Heating_To_Reflow_c
+078B D290       412       setb TEMP_OK
+078D            413   Heating_To_Reflow_c:
+078D            414       ; check state
+078D 3095FD     415       jnb STATE_STABLE, $ ; wait for state to be stable
+0790 12043E     416       lcall read_state
+0793 B40302     417       cjne a, #3, State_4
+0796 80BC       418       sjmp Heating_To_Reflow
+0798            419   
+0798            420   ;-------------------------------------------------- STATE 4 --------------------------------------------------
+0798            421   ; reflow temperature has been reached, temperature is held for [reflowtime]
+0798            422   State_4:
+0798            423       ; check state
+0798 3095FD     424       jnb STATE_STABLE, $ ; wait for state to be stable
+079B 12043E     425       lcall read_state
+079E B4044B     426       cjne a, #4, State_5
+07A1            427   
+07A1            428       ; [Sound saying the current state "Reflowing"]
+07A1            429   
+07A1            430   Reflowing:
+07A1            431       ; read temperature every second
+07A1 30000B     432       jnb seconds_flag, Reflowing_a
+07A4 C200       433       clr seconds_flag
+07A6 1203F7     434       lcall Read_ADC
+07A9 12044A     435       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+07AC 120396     436       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+07AF            437   Reflowing_a:
+07AF            438       ; play sound every five seconds
+07AF 300102     439       jnb five_seconds_flag, Reflowing_b
+07B2 C201       440       clr five_seconds_flag
+07B4            441       ; [function to play sound here]
+07B4            442   Reflowing_b:
+07B4 753300     443            mov x+0, #low (0 % 0x10000) 
+07B7 753400     443            mov x+1, #high(0 % 0x10000) 
+07BA 753500     443            mov x+2, #low (0 / 0x10000) 
+07BD 753600     443            mov x+3, #high(0 / 0x10000) 
+07C0 753700     444            mov y+0, #low (0 % 0x10000) 
+07C3 753800     444            mov y+1, #high(0 % 0x10000) 
+07C6 753900     444            mov y+2, #low (0 / 0x10000) 
+07C9 753A00     444            mov y+3, #high(0 / 0x10000) 
+07CC 854433     445       mov x+0, temp_reading
+07CF 854137     446       mov y+0, reflowtemp
+07D2 120240     447       lcall x_gteq_y
+07D5 200210     448       jb mf, Reflowing_too_high
+07D8            449       ; if temperature >= soaktemp, turn off the oven
+07D8 20020D     450       jb mf, Reflowing_too_high
+07DB            451       ; else, turn on the oven
+07DB D296       452       setb OVEN_CTL_PIN
+07DD            453   Reflowing_d:
+07DD            454       ; check state
+07DD 3095FD     455       jnb STATE_STABLE, $ ; wait for state to be stable
+07E0 12043E     456       lcall read_state
+07E3 B40406     457       cjne a, #4, State_5
+07E6 80B9       458       sjmp Reflowing
+07E8            459   
+07E8            460   Reflowing_too_high:
+07E8 C296       461       clr OVEN_CTL_PIN ; turn off the oven
+07EA 80F1       462       sjmp Reflowing_d
+07EC            463   
+07EC            464   ;------------------------------------------------- STATE 5/6 -------------------------------------------------
+07EC            465   ; cooldown/error
+07EC            466   State_5:
+07EC            467       ; check state
+07EC 3095FD     468       jnb STATE_STABLE, $ ; wait for state to be stable
+07EF 12043E     469       lcall read_state
+07F2 B40520     470       cjne a, #5, State_6
+07F5            471   
+07F5            472       ; turn off the oven
+07F5 C296       473       clr OVEN_CTL_PIN
+07F7            474   
+07F7            475       ; display "OVEN OFF" message
+07F7 C0E0       476            push acc
+07F9 7401       476            mov a, #1
+07FB 14         476            dec a
+07FC 1200BD     476            lcall ?Set_Cursor_2 ; Select column and row
+07FF D0E0       476            pop acc
+0801 C083       477            push dph
+0803 C082       477            push dpl
+0805 C0E0       477            push acc
+0807 9004F5     477            mov dptr, #OVEN_OFF
+080A 1200B2     477            lcall ?Send_Constant_String
+080D D0E0       477            pop acc
+080F D082       477            pop dpl
+0811 D083       477            pop dph
+0813            478   
+0813            479       ; [Sound saying current state "Cooldown"]
+0813 802C       480       sjmp Cooldown
+0815            481   
+0815            482   State_6:
+0815            483       ; check state
+0815 3095FD     484       jnb STATE_STABLE, $ ; wait for state to be stable
+0818 12043E     485       lcall read_state
+081B B40620     486       cjne a, #6, Jump_State_0
+081E            487   
+081E            488       ; turn off the oven
+081E C296       489       clr OVEN_CTL_PIN
+0820            490   
+0820            491       ; display "OVEN OFF" message
+0820 C0E0       492            push acc
+0822 7401       492            mov a, #1
+0824 14         492            dec a
+0825 1200BD     492            lcall ?Set_Cursor_2 ; Select column and row
+0828 D0E0       492            pop acc
+082A C083       493            push dph
+082C C082       493            push dpl
+082E C0E0       493            push acc
+0830 9004F5     493            mov dptr, #OVEN_OFF
+0833 1200B2     493            lcall ?Send_Constant_String
+0836 D0E0       493            pop acc
+0838 D082       493            pop dpl
+083A D083       493            pop dph
+083C            494   
+083C            495       ; [Sound saying current state "Error"]
+083C 8003       496       sjmp Cooldown
+083E            497   
+083E            498   Jump_State_0:
+083E 0205B4     499       ljmp State_0
+0841            500   
+0841            501   Cooldown:
+0841            502       ; read temperature every second
+0841 30000B     503       jnb seconds_flag, Cooldown_a
+0844 C200       504       clr seconds_flag
+0846 1203F7     505       lcall Read_ADC
+0849 12044A     506       lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+084C 120396     507       lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+084F            508   Cooldown_a:
+084F            509       ; play sound every five seconds
+084F 300102     510       jnb five_seconds_flag, Cooldown_b
+0852 C201       511       clr five_seconds_flag
+0854            512       ; [function to play sound here]
+0854            513   Cooldown_b:
+0854 753300     514            mov x+0, #low (0 % 0x10000) 
+0857 753400     514            mov x+1, #high(0 % 0x10000) 
+085A 753500     514            mov x+2, #low (0 / 0x10000) 
+085D 753600     514            mov x+3, #high(0 / 0x10000) 
+0860 753732     515            mov y+0, #low (50 % 0x10000) 
+0863 753800     515            mov y+1, #high(50 % 0x10000) 
+0866 753900     515            mov y+2, #low (50 / 0x10000) 
+0869 753A00     515            mov y+3, #high(50 / 0x10000) 
+086C 854433     516       mov x+0, temp_reading
+086F 120240     517       lcall x_gteq_y
+0872 200202     518       jb mf, Cooldown_c
+0875 C291       519       clr TEMP_50
+0877            520   Cooldown_c:
+0877            521       ; if temperature >= 50, TEMP_50 = 1
+0877            522       ; else, TEMP_50 = 0
+0877 12048A     523       lcall Check_50
+087A            524       ; check state
+087A 3095FD     525       jnb STATE_STABLE, $ ; wait for state to be stable
+087D 12043E     526       lcall read_state
+0880 B40502     527       cjne a, #5, Cooldown_d
+0883 80BC       528       sjmp Cooldown
+0885            529   Cooldown_d:
+0885 B406B6     530       cjne a, #6, Jump_State_0
+0888 80B7       531       sjmp Cooldown
+088A            532   
+088A            533   ;-------------------------------------------------- SETUP ----------------------------------------------------
+088A            534   setup:
+088A            535       ; temperature not set, TEMP_OK = 0
+088A C290       536       clr TEMP_OK
+088C            537       ; prints "SOAK" left aligned in the top row
+088C C0E0       538            push acc
+088E 7401       538            mov a, #1
+0890 14         538            dec a
+0891 1200BF     538            lcall ?Set_Cursor_1 ; Select column and row
+0894 D0E0       538            pop acc
+0896 C083       539            push dph
+0898 C082       539            push dpl
+089A C0E0       539            push acc
+089C 9004B1     539            mov dptr, #SOAK_TEMP
+089F 1200B2     539            lcall ?Send_Constant_String
+08A2 D0E0       539            pop acc
+08A4 D082       539            pop dpl
+08A6 D083       539            pop dph
+08A8            540       ; prints "REFLOW" left aligned in the bottom row
+08A8 C0E0       541            push acc
+08AA 7401       541            mov a, #1
+08AC 14         541            dec a
+08AD 1200BD     541            lcall ?Set_Cursor_2 ; Select column and row
+08B0 D0E0       541            pop acc
+08B2 C083       542            push dph
+08B4 C082       542            push dpl
+08B6 C0E0       542            push acc
+08B8 9004C2     542            mov dptr, #REFLOW_TEMP
+08BB 1200B2     542            lcall ?Send_Constant_String
+08BE D0E0       542            pop acc
+08C0 D082       542            pop dpl
+08C2 D083       542            pop dph
+08C4            543       ; display soak temperature
+08C4 753300     544            mov x+0, #low (0 % 0x10000) 
+08C7 753400     544            mov x+1, #high(0 % 0x10000) 
+08CA 753500     544            mov x+2, #low (0 / 0x10000) 
+08CD 753600     544            mov x+3, #high(0 / 0x10000) 
+08D0 854033     545       mov x+0, soaktemp
+08D3 1200DA     546       lcall hex2bcd
+08D6 C0E0       547            push acc
+08D8 7408       547            mov a, #8
+08DA 14         547            dec a
+08DB 1200BF     547            lcall ?Set_Cursor_1 ; Select column and row
+08DE D0E0       547            pop acc
+08E0 C000       547            push ar0
+08E2 A83C       547            mov r0, bcd+1
+08E4 1200C4     547            lcall ?Display_BCD
+08E7 D000       547            pop ar0
+08E9 C000       547            push ar0
+08EB A83B       547            mov r0, bcd+0
+08ED 1200C4     547            lcall ?Display_BCD
+08F0 D000       547            pop ar0
+08F2            547            ; Replace all the zeros to the left with blanks
+08F2 C0E0       547            push acc
+08F4 7408       547            mov a, #8
+08F6 14         547            dec a
+08F7 1200BF     547            lcall ?Set_Cursor_1 ; Select column and row
+08FA D0E0       547            pop acc
+08FC 12034A     547            lcall replace_zeros
+08FF            548       ; display reflow temperature
+08FF 854133     549       mov x+0, reflowtemp+0
+0902 1200DA     550       lcall hex2bcd
+0905 C0E0       551            push acc
+0907 7408       551            mov a, #8
+0909 14         551            dec a
+090A 1200BD     551            lcall ?Set_Cursor_2 ; Select column and row
+090D D0E0       551            pop acc
+090F C000       551            push ar0
+0911 A83C       551            mov r0, bcd+1
+0913 1200C4     551            lcall ?Display_BCD
+0916 D000       551            pop ar0
+0918 C000       551            push ar0
+091A A83B       551            mov r0, bcd+0
+091C 1200C4     551            lcall ?Display_BCD
+091F D000       551            pop ar0
+0921            551            ; Replace all the zeros to the left with blanks
+0921 C0E0       551            push acc
+0923 7408       551            mov a, #8
+0925 14         551            dec a
+0926 1200BD     551            lcall ?Set_Cursor_2 ; Select column and row
+0929 D0E0       551            pop acc
+092B 12034A     551            lcall replace_zeros
+092E            552   
+092E            553   ; set soak temperature
+092E            554   ; MAX: 240
+092E            555   ; MIN: 120
+092E            556   set_soak_temp:
+092E 854033     557       mov x+0, soaktemp
+0931 C0E0       558            push acc
+0933 740B       558            mov a, #11
+0935 14         558            dec a
+0936 1200BF     558            lcall ?Set_Cursor_1 ; Select column and row
+0939 D0E0       558            pop acc
+093B C0E0       559            push acc
+093D 740E       559            mov a, #0xE
+093F 120083     559            lcall ?WriteCommand
+0942 D0E0       559            pop acc
+0944            560       ; if BOOT_BUTTON is being pressed, wait for release
+0944 30C5FD     561       jnb BOOT_BUTTON, $
+0947            562   set_soak_temp_a:
+0947            563       ; if UP is pressed, increment temperature
+0947 208705     564       jb UP, set_soak_temp_b
+094A E533       565       mov a, x+0
+094C            566       ; if temperature < 240, increment temperature
+094C B4F032     567       cjne a, #0xF0, set_soak_temp_d
+094F            568   set_soak_temp_b:
+094F            569       ; if DOWN button is pressed, increment temperature  
+094F 208505     570       jb DOWN, set_soak_temp_c
+0952 E533       571       mov a, x+0
+0954            572       ; if temperature > 120, decrement temperature
+0954 B4783A     573       cjne a, #0x78, set_soak_temp_e
+0957            574   set_soak_temp_c:  
+0957 C203       575       clr hold_button
+0959 C0E0       576            push acc
+095B 740B       576            mov a, #11
+095D 14         576            dec a
+095E 1200BF     576            lcall ?Set_Cursor_1 ; Select column and row
+0961 D0E0       576            pop acc
+0963 C0E0       577            push acc
+0965 740E       577            mov a, #0xE
+0967 120083     577            lcall ?WriteCommand
+096A D0E0       577            pop acc
+096C            578       ; if BOOT_BUTTON is pressed, set reflow time
+096C 20C5D8     579       jb BOOT_BUTTON, set_soak_temp_a
+096F C002       580            push AR2
+0971 7A32       580            mov R2, #50
+0973 120039     580            lcall ?Wait_Milli_Seconds
+0976 D002       580            pop AR2 ; debounce time
+0978 20C5CC     581       jb BOOT_BUTTON, set_soak_temp_a
+097B 853340     582       mov soaktemp, x+0
+097E 020A39     583       ljmp set_reflow_temp
+0981            584   set_soak_temp_d:
+0981            585       ; increment soak temperature
+0981 C0E0       586            push acc
+0983 740C       586            mov a, #0xC
+0985 120083     586            lcall ?WriteCommand
+0988 D0E0       586            pop acc
+098A 0533       587       inc x+0
+098C            588       ; if UP is held, increment temperature rapidly
+098C 200312     589       jb hold_button, set_soak_temp_f
+098F 804D       590       sjmp set_soak_temp_g
+0991            591   set_soak_temp_e:
+0991            592       ; decrement soak temperature
+0991 C0E0       593            push acc
+0993 740C       593            mov a, #0xC
+0995 120083     593            lcall ?WriteCommand
+0998 D0E0       593            pop acc
+099A 1533       594       dec x+0
+099C            595       ; if DOWN button is held, decrement temperature rapidly
+099C 200302     596       jb hold_button, set_soak_temp_f
+099F 803D       597       sjmp set_soak_temp_g
+09A1            598   set_soak_temp_f:
+09A1            599       ; update display and wait 25 ms
+09A1 1200DA     600       lcall hex2bcd
+09A4 C0E0       601            push acc
+09A6 7408       601            mov a, #8
+09A8 14         601            dec a
+09A9 1200BF     601            lcall ?Set_Cursor_1 ; Select column and row
+09AC D0E0       601            pop acc
+09AE C000       601            push ar0
+09B0 A83C       601            mov r0, bcd+1
+09B2 1200C4     601            lcall ?Display_BCD
+09B5 D000       601            pop ar0
+09B7 C000       601            push ar0
+09B9 A83B       601            mov r0, bcd+0
+09BB 1200C4     601            lcall ?Display_BCD
+09BE D000       601            pop ar0
+09C0            601            ; Replace all the zeros to the left with blanks
+09C0 C0E0       601            push acc
+09C2 7408       601            mov a, #8
+09C4 14         601            dec a
+09C5 1200BF     601            lcall ?Set_Cursor_1 ; Select column and row
+09C8 D0E0       601            pop acc
+09CA 12034A     601            lcall replace_zeros
+09CD C002       602            push AR2
+09CF 7A19       602            mov R2, #25
+09D1 120039     602            lcall ?Wait_Milli_Seconds
+09D4 D002       602            pop AR2
+09D6            603       ; if UP is held, increment temperature
+09D6 308756     604       jnb UP, set_soak_temp_h
+09D9            605       ; if DOWN button is held, decrement temperature
+09D9 308558     606       jnb DOWN, set_soak_temp_i
+09DC C203       607       clr hold_button
+09DE            608   set_soak_temp_g:
+09DE            609       ; update display and wait 250 ms
+09DE 1200DA     610       lcall hex2bcd
+09E1 C0E0       611            push acc
+09E3 7408       611            mov a, #8
+09E5 14         611            dec a
+09E6 1200BF     611            lcall ?Set_Cursor_1 ; Select column and row
+09E9 D0E0       611            pop acc
+09EB C000       611            push ar0
+09ED A83C       611            mov r0, bcd+1
+09EF 1200C4     611            lcall ?Display_BCD
+09F2 D000       611            pop ar0
+09F4 C000       611            push ar0
+09F6 A83B       611            mov r0, bcd+0
+09F8 1200C4     611            lcall ?Display_BCD
+09FB D000       611            pop ar0
+09FD            611            ; Replace all the zeros to the left with blanks
+09FD C0E0       611            push acc
+09FF 7408       611            mov a, #8
+0A01 14         611            dec a
+0A02 1200BF     611            lcall ?Set_Cursor_1 ; Select column and row
+0A05 D0E0       611            pop acc
+0A07 12034A     611            lcall replace_zeros
+0A0A C0E0       612            push acc
+0A0C 740B       612            mov a, #11
+0A0E 14         612            dec a
+0A0F 1200BF     612            lcall ?Set_Cursor_1 ; Select column and row
+0A12 D0E0       612            pop acc
+0A14 C0E0       613            push acc
+0A16 740E       613            mov a, #0xE
+0A18 120083     613            lcall ?WriteCommand
+0A1B D0E0       613            pop acc
+0A1D C002       614            push AR2
+0A1F 7AFA       614            mov R2, #250
+0A21 120039     614            lcall ?Wait_Milli_Seconds
+0A24 D002       614            pop AR2
+0A26            615       ; if UP is held, set a flag so the program knows
+0A26 308706     616       jnb UP, set_soak_temp_h
+0A29            617       ; if DOWN button is held, set a flag so the program knows 
+0A29 308508     618       jnb DOWN, set_soak_temp_i
+0A2C 020947     619       ljmp set_soak_temp_a
+0A2F            620   set_soak_temp_h:
+0A2F D203       621       setb hold_button
+0A31 020947     622       ljmp set_soak_temp_a
+0A34            623   set_soak_temp_i:
+0A34 D203       624       setb hold_button
+0A36 02094F     625       ljmp set_soak_temp_b
+0A39            626   
+0A39            627   ; set reflow temp
+0A39            628   ; MAX: 240
+0A39            629   ; MIN: 120
+0A39            630   set_reflow_temp:
+0A39 854133     631       mov x+0, reflowtemp
+0A3C C0E0       632            push acc
+0A3E 740B       632            mov a, #11
+0A40 14         632            dec a
+0A41 1200BD     632            lcall ?Set_Cursor_2 ; Select column and row
+0A44 D0E0       632            pop acc
+0A46 C0E0       633            push acc
+0A48 740E       633            mov a, #0xE
+0A4A 120083     633            lcall ?WriteCommand
+0A4D D0E0       633            pop acc
+0A4F            634       ; if BOOT_BUTTON is being pressed, wait for release
+0A4F 30C5FD     635       jnb BOOT_BUTTON, $
+0A52            636   set_reflow_temp_a:
+0A52            637       ; if UP is pressed, increment temperature
+0A52 208705     638       jb UP, set_reflow_temp_b
+0A55 E533       639       mov a, x+0
+0A57            640       ; if temperature < 240, increment temperature
+0A57 B4F032     641       cjne a, #0xF0, set_reflow_temp_d
+0A5A            642   set_reflow_temp_b:
+0A5A            643       ; if DOWN button is pressed, increment temperature  
+0A5A 208505     644       jb DOWN, set_reflow_temp_c
+0A5D E533       645       mov a, x+0
+0A5F            646       ; if temperature > 0, decrement temperature
+0A5F B4783A     647       cjne a, #0x78, set_reflow_temp_e
+0A62            648   set_reflow_temp_c:  
+0A62 C203       649       clr hold_button
+0A64 C0E0       650            push acc
+0A66 740B       650            mov a, #11
+0A68 14         650            dec a
+0A69 1200BD     650            lcall ?Set_Cursor_2 ; Select column and row
+0A6C D0E0       650            pop acc
+0A6E C0E0       651            push acc
+0A70 740E       651            mov a, #0xE
+0A72 120083     651            lcall ?WriteCommand
+0A75 D0E0       651            pop acc
+0A77            652       ; if BOOT_BUTTON is pressed, set reflow time
+0A77 20C5D8     653       jb BOOT_BUTTON, set_reflow_temp_a
+0A7A C002       654            push AR2
+0A7C 7A32       654            mov R2, #50
+0A7E 120039     654            lcall ?Wait_Milli_Seconds
+0A81 D002       654            pop AR2 ; debounce time
+0A83 20C5CC     655       jb BOOT_BUTTON, set_reflow_temp_a
+0A86 853341     656       mov reflowtemp, x+0
+0A89 020B44     657       ljmp setup_done
+0A8C            658   set_reflow_temp_d:
+0A8C            659       ; increment reflow temperature
+0A8C C0E0       660            push acc
+0A8E 740C       660            mov a, #0xC
+0A90 120083     660            lcall ?WriteCommand
+0A93 D0E0       660            pop acc
+0A95 0533       661       inc x+0
+0A97            662       ; if UP is held, increment temperature rapidly
+0A97 200312     663       jb hold_button, set_reflow_temp_f
+0A9A 804D       664       sjmp set_reflow_temp_g
+0A9C            665   set_reflow_temp_e:
+0A9C            666       ; decrement reflow temperature
+0A9C C0E0       667            push acc
+0A9E 740C       667            mov a, #0xC
+0AA0 120083     667            lcall ?WriteCommand
+0AA3 D0E0       667            pop acc
+0AA5 1533       668       dec x+0
+0AA7            669       ; if DOWN button is held, decrement temperature rapidly
+0AA7 200302     670       jb hold_button, set_reflow_temp_f
+0AAA 803D       671       sjmp set_reflow_temp_g
+0AAC            672   set_reflow_temp_f:
+0AAC            673       ; update display and wait 25 ms
+0AAC 1200DA     674       lcall hex2bcd
+0AAF C0E0       675            push acc
+0AB1 7408       675            mov a, #8
+0AB3 14         675            dec a
+0AB4 1200BD     675            lcall ?Set_Cursor_2 ; Select column and row
+0AB7 D0E0       675            pop acc
+0AB9 C000       675            push ar0
+0ABB A83C       675            mov r0, bcd+1
+0ABD 1200C4     675            lcall ?Display_BCD
+0AC0 D000       675            pop ar0
+0AC2 C000       675            push ar0
+0AC4 A83B       675            mov r0, bcd+0
+0AC6 1200C4     675            lcall ?Display_BCD
+0AC9 D000       675            pop ar0
+0ACB            675            ; Replace all the zeros to the left with blanks
+0ACB C0E0       675            push acc
+0ACD 7408       675            mov a, #8
+0ACF 14         675            dec a
+0AD0 1200BD     675            lcall ?Set_Cursor_2 ; Select column and row
+0AD3 D0E0       675            pop acc
+0AD5 12034A     675            lcall replace_zeros
+0AD8 C002       676            push AR2
+0ADA 7A19       676            mov R2, #25
+0ADC 120039     676            lcall ?Wait_Milli_Seconds
+0ADF D002       676            pop AR2
+0AE1            677       ; if UP is held, increment temperature
+0AE1 308756     678       jnb UP, set_reflow_temp_h
+0AE4            679       ; if DOWN button is held, decrement temperature
+0AE4 308558     680       jnb DOWN, set_reflow_temp_i
+0AE7 C203       681       clr hold_button
+0AE9            682   set_reflow_temp_g:
+0AE9            683       ; update display and wait 250 ms
+0AE9 1200DA     684       lcall hex2bcd
+0AEC C0E0       685            push acc
+0AEE 7408       685            mov a, #8
+0AF0 14         685            dec a
+0AF1 1200BD     685            lcall ?Set_Cursor_2 ; Select column and row
+0AF4 D0E0       685            pop acc
+0AF6 C000       685            push ar0
+0AF8 A83C       685            mov r0, bcd+1
+0AFA 1200C4     685            lcall ?Display_BCD
+0AFD D000       685            pop ar0
+0AFF C000       685            push ar0
+0B01 A83B       685            mov r0, bcd+0
+0B03 1200C4     685            lcall ?Display_BCD
+0B06 D000       685            pop ar0
+0B08            685            ; Replace all the zeros to the left with blanks
+0B08 C0E0       685            push acc
+0B0A 7408       685            mov a, #8
+0B0C 14         685            dec a
+0B0D 1200BD     685            lcall ?Set_Cursor_2 ; Select column and row
+0B10 D0E0       685            pop acc
+0B12 12034A     685            lcall replace_zeros
+0B15 C0E0       686            push acc
+0B17 740B       686            mov a, #11
+0B19 14         686            dec a
+0B1A 1200BD     686            lcall ?Set_Cursor_2 ; Select column and row
+0B1D D0E0       686            pop acc
+0B1F C0E0       687            push acc
+0B21 740E       687            mov a, #0xE
+0B23 120083     687            lcall ?WriteCommand
+0B26 D0E0       687            pop acc
+0B28 C002       688            push AR2
+0B2A 7AFA       688            mov R2, #250
+0B2C 120039     688            lcall ?Wait_Milli_Seconds
+0B2F D002       688            pop AR2
+0B31            689       ; if UP is held, set a flag so the program knows
+0B31 308706     690       jnb UP, set_reflow_temp_h
+0B34            691       ; if DOWN button is held, set a flag so the program knows 
+0B34 308508     692       jnb DOWN, set_reflow_temp_i
+0B37 020A52     693       ljmp set_reflow_temp_a
+0B3A            694   set_reflow_temp_h:
+0B3A D203       695       setb hold_button
+0B3C 020A52     696       ljmp set_reflow_temp_a
+0B3F            697   set_reflow_temp_i:
+0B3F D203       698       setb hold_button
+0B41 020A5A     699       ljmp set_reflow_temp_b
+0B44            700   
+0B44            701   setup_done:
+0B44 C0E0       702            push acc
+0B46 740C       702            mov a, #0xC
+0B48 120083     702            lcall ?WriteCommand
+0B4B D0E0       702            pop acc
+0B4D            703       ; display current temperature
+0B4D C0E0       704            push acc
+0B4F 7401       704            mov a, #1
+0B51 14         704            dec a
+0B52 1200BF     704            lcall ?Set_Cursor_1 ; Select column and row
+0B55 D0E0       704            pop acc
+0B57 C083       705            push dph
+0B59 C082       705            push dpl
+0B5B C0E0       705            push acc
+0B5D 9004D3     705            mov dptr, #CURRENT_TEMP
+0B60 1200B2     705            lcall ?Send_Constant_String
+0B63 D0E0       705            pop acc
+0B65 D082       705            pop dpl
+0B67 D083       705            pop dph
+0B69 1203F7     706       lcall Read_ADC
+0B6C C0E0       707            push acc
+0B6E 7408       707            mov a, #8
+0B70 14         707            dec a
+0B71 1200BF     707            lcall ?Set_Cursor_1 ; Select column and row
+0B74 D0E0       707            pop acc
+0B76 C000       707            push ar0
+0B78 A83C       707            mov r0, bcd+1
+0B7A 1200C4     707            lcall ?Display_BCD
+0B7D D000       707            pop ar0
+0B7F C000       707            push ar0
+0B81 A83B       707            mov r0, bcd+0
+0B83 1200C4     707            lcall ?Display_BCD
+0B86 D000       707            pop ar0
+0B88            707            ; Replace all the zeros to the left with blanks
+0B88 C0E0       707            push acc
+0B8A 7408       707            mov a, #8
+0B8C 14         707            dec a
+0B8D 1200BF     707            lcall ?Set_Cursor_1 ; Select column and row
+0B90 D0E0       707            pop acc
+0B92 12034A     707            lcall replace_zeros
+0B95 0205B4     708       ljmp State_0

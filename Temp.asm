@@ -10,17 +10,17 @@ TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 
 BOOT_BUTTON   equ P4.5
-UP            equ P0.5
-DOWN		  equ P0.7
+UP            equ P0.7
+DOWN		  equ P0.5
 ; Input 3 bit binary state from TIME/FSM MCU
-STATE_bit0      equ P2.1
-STATE_bit1      equ P2.2
-STATE_bit2      equ P2.3
-STATE_STABLE    equ P2.4
+STATE_bit0      equ P1.2
+STATE_bit1      equ P1.3
+STATE_bit2      equ P1.4
+STATE_STABLE    equ P1.5
 ; Outputs to Time/FSM MCU
- TEMP_OK        equ P2.3
- TEMP_50        equ P2.4
- OVEN_CTL_PIN   equ P1.5
+ TEMP_OK        equ P1.0
+ TEMP_50        equ P1.1
+ OVEN_CTL_PIN   equ P1.6
 
 org 0000H
    ljmp MainProgram
@@ -69,10 +69,10 @@ hold_button:        dbit 1
 
 CSEG
 ; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
-CE_ADC EQU P2.0 
-MY_MOSI EQU P2.1
-MY_MISO EQU P2.2
-MY_SCLK EQU P2.3
+CE_ADC  EQU P0.4
+MY_MOSI EQU P0.3
+MY_MISO EQU P0.2
+MY_SCLK EQU P0.1
 ; These 'equ' must match the hardware wiring
 ; They are used by 'LCD_4bit.inc'
 LCD_RS equ P3.2
@@ -144,7 +144,7 @@ INIT_SPI:
 ;---------------------------------;
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
-	cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
+	;cpl P1.0 ; To check the interrupt rate with oscilloscope. It must be precisely a 1 ms pulse.
 	
 	; The two registers used in the ISR must be saved in the stack
 	push acc
@@ -192,6 +192,8 @@ MainProgram:
     setb EA   ; Enable Global interrupts
     mov P0M0, #0
     mov P0M1, #0
+    mov P1M0, #0
+    mov P1M1, #0
     mov P2M0, #0
     mov P2M1, #0
     
@@ -201,7 +203,18 @@ MainProgram:
     lcall LCD_4BIT
     lcall Timer2_Init
 
+    setb STATE_bit0
+    setb STATE_bit1
+    setb STATE_bit2
+    setb STATE_STABLE
+
+    clr TEMP_OK
+    clr TEMP_50
+    clr OVEN_CTL_PIN
+
     clr seconds_flag
+    clr five_seconds_flag
+    clr hold_button
 
     mov count1ms+0, #0
     mov count1ms+0, #0
@@ -301,6 +314,9 @@ Heating_To_Soak_b:
     jnb mf, Heating_To_Soak_c
     clr TEMP_OK
 Heating_To_Soak_c:
+    ; if temperature >= 50, TEMP_50 = 1
+    ; else, TEMP_50 = 0
+    lcall Check_50
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
     lcall read_state
@@ -390,7 +406,7 @@ Heating_To_Reflow_b:
     Load_X(0)
     Load_Y(0)
     mov x+0, temp_reading
-    mov y+0, soaktemp
+    mov y+0, reflowtemp
     lcall x_gteq_y
     jnb mf, Heating_To_Reflow_c
     setb TEMP_OK
@@ -427,7 +443,7 @@ Reflowing_b:
     Load_X(0)
     Load_Y(0)
     mov x+0, temp_reading
-    mov y+0, soaktemp
+    mov y+0, reflowtemp
     lcall x_gteq_y
     jb mf, Reflowing_too_high
     ; if temperature >= soaktemp, turn off the oven
@@ -502,6 +518,9 @@ Cooldown_b:
     jb mf, Cooldown_c
     clr TEMP_50
 Cooldown_c:
+    ; if temperature >= 50, TEMP_50 = 1
+    ; else, TEMP_50 = 0
+    lcall Check_50
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
     lcall read_state
@@ -685,6 +704,5 @@ setup_done:
     Set_Cursor(1,1)
     Send_Constant_String(#CURRENT_TEMP)
     lcall Read_ADC
-    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    Display_temp_BCD(1,8)
     ljmp State_0

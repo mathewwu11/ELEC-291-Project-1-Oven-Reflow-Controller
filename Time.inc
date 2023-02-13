@@ -160,4 +160,5 @@ output_state:
 	mov STATE_bit1, c	
 	rrc a
 	mov STATE_bit2, c
+	setb STATE_STABLE
 	ret 
