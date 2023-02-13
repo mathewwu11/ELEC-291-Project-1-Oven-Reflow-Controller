@@ -15,6 +15,7 @@ C:\Source>gcc Computer_Sender.c –o Computer_Sender.exe
 C:\Source>Computer_Sender -?
 
 SPI flash memory programmer using serial protocol. (C) Jesus Calvino-Fraga (2012-2019)
+
 ***Usage examples:***
 Computer_Sender -DCOM3 -w somefile.wav (write 'somefile.wav' to flash via COM3)
 
