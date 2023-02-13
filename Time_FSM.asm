@@ -9,17 +9,17 @@ BRG_VAL equ (0x100-(CLK/(16*BAUD)))
 TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/TIMER2_RATE)))
 
-BOOT_BUTTON   equ P4.5
-UP            equ P0.2
-DOWN		  equ P0.6
+BOOT_BUTTON   equ P1.0
+UP            equ P1.3
+DOWN		  equ P1.6
 ; Output 3 bit binary state to temperature MCU
-STATE_bit0      equ P1.2
-STATE_bit1      equ P1.3
-STATE_bit2      equ P1.4
-STATE_STABLE    equ P1.5
+STATE_bit0      equ P0.3
+STATE_bit1      equ P0.2
+STATE_bit2      equ P0.1
+STATE_STABLE    equ P0.0
 ; Inputs from temperature MCU
- TEMP_OK     equ P0.0
- TEMP_50     equ P0.1
+ TEMP_OK     equ P0.5
+ TEMP_50     equ P0.4
 
 org 0000H
    ljmp MainProgram
@@ -70,13 +70,13 @@ hold_button:        dbit 1
 CSEG
 ; These 'equ' must match the hardware wiring
 ; They are used by 'LCD_4bit.inc'
-LCD_RS equ P3.2
+LCD_RS equ P2.2
 ; LCD_RW equ Px.x ; Always grounded
-LCD_E  equ P3.3
-LCD_D4 equ P3.4
-LCD_D5 equ P3.5
-LCD_D6 equ P3.6
-LCD_D7 equ P3.7
+LCD_E  equ P2.3
+LCD_D4 equ P2.4
+LCD_D5 equ P2.5
+LCD_D6 equ P2.6
+LCD_D7 equ P2.7
 
 $NOLIST
 $include(LCD_4bit.inc)
@@ -162,8 +162,6 @@ MainProgram:
     mov P0M1, #0
     mov P1M0, #0
     mov P1M1, #0
-    mov P2M0, #0
-    mov P2M1, #0
     
     lcall LCD_4BIT
     lcall Timer2_Init
@@ -219,9 +217,10 @@ Temp_not_set:
     ; prints "SET temperature" message
     Set_Cursor (2,1)
     Send_Constant_String(#SET_TEMP)
-    ; if BOOT_BUTTON or UP are being pressed, wait for release
+    ; if BOOT_BUTTON/UP/DOWN are being pressed, wait for release
     jnb BOOT_BUTTON, $
     jnb UP, $
+    jnb DOWN, $
 Temp_not_set_a:
     ; if BOOT_BUTTON is pressed, jump to setup
     jb BOOT_BUTTON, Temp_not_set_b
@@ -237,9 +236,10 @@ Idle:
     ; prints "READY" message
     Set_Cursor (2,1)
     Send_Constant_String(#READY)
-    ; if BOOT_BUTTON or UP are being pressed, wait for release
+    ; if BOOT_BUTTON/UP/DOWN are being pressed, wait for release
     jnb BOOT_BUTTON, $
     jnb UP, $
+    jnb DOWN, $
 Idle_a:
     ; if BOOT_BUTTON is pressed, jump to setup
     jb BOOT_BUTTON, Idle_b
@@ -275,6 +275,8 @@ State_1:
     setb TR2
 
 Heating_To_Soak:
+    ; if DOWN is pressed, stop process and jump to State_5 (cooldown)
+    jnb DOWN, Jump_State_5_a
     ; if 1 second has passed, increment uptime
     lcall count_uptime
     ; if uptime >= 1 minutes && temperature < 50, jump to State_6 (Error)
@@ -292,6 +294,9 @@ Heating_To_Soak_b:
     jnb TEMP_OK, State_2
     sjmp Heating_To_Soak
 
+Jump_State_5_a:
+    ljmp State_5
+
 ;-------------------------------------------------- STATE 2 --------------------------------------------------
 ; soak temperature has been reached, temperature is held for [soaktime]
 State_2:
@@ -308,6 +313,8 @@ State_2:
     lcall update_calc_time
 
 Soaking:
+    ; if DOWN is pressed, stop process and jump to State_5 (cooldown)
+    jnb DOWN, Jump_State_5_b
     ; if 1 second has passed, increment uptime
     lcall count_uptime
     ; if temperature is incorrect, jump to State_6 (Error)
@@ -322,6 +329,9 @@ Soaking_a:
     mov b, calc_time+0
     cjne a, b, Soaking
     sjmp State_3
+
+Jump_State_5_b:
+    ljmp State_5
     
 ;-------------------------------------------------- STATE 3 --------------------------------------------------
 ; heating to reflow temperature
@@ -340,6 +350,8 @@ State_3:
     unload_time(calc_time, calc_time_BCD)
 
 Heating_To_Reflow:
+    ; if UP, stop process and jump to State_5 (cooldown)
+    jnb DOWN, Jump_State_5_c
     ; if 1 second has passed, increment uptime
     lcall count_uptime
     ; if temperature != Reflow temperature after [max_heat_time], jump to State_6 (Error)
@@ -354,6 +366,9 @@ Heating_To_Reflow_a:
     ; if temperature == Reflow temperature, jump to State_4 (Reflowing)
     jb TEMP_OK, State_4
     sjmp Heating_To_Reflow
+
+Jump_State_5_c:
+    ljmp State_5
 
 ;-------------------------------------------------- STATE 4 --------------------------------------------------
 ; reflow temperature has been reached, temperature is held for [reflowtime]
@@ -371,6 +386,8 @@ State_4:
     lcall update_calc_time
 
 Reflowing:
+    ; if UP, stop process and jump to State_5 (cooldown)
+    jnb UP, State_5
     ; if 1 second has passed, increment uptime
     lcall count_uptime
     ; if temperature is incorrect, jump to State_6 (Error)
