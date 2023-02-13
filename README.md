@@ -5,9 +5,11 @@ To send the WAV file to the microcontroller, a program that runs on Microsoft Wi
 course web page. 
 
 ***If you want to recompile this program you can use Visual C from a command prompt:***
+
 C:\Source>cl Computer_Sender.c
 
 ***or similarly, if GCC is installed in your computer:***
+
 C:\Source>gcc Computer_Sender.c –o Computer_Sender.exe
 
 C:\Source>Computer_Sender -?
