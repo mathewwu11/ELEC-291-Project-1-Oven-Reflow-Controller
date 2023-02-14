@@ -396,7 +396,7 @@ MainProgram:
 State_0:
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
-    lcall read_state
+    lcall Sound_Heating_To_Soak
     cjne a, #0, State_1
 
     ; turn off the oven
@@ -417,7 +417,7 @@ State_0:
 Idle:
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
-    lcall read_state
+    lcall Sound_Heating_To_Soak
     cjne a, #0, State_1
     ; Read tempurature every second
     jnb seconds_flag, Idle_a
@@ -879,11 +879,11 @@ setup_done:
 play_temp: 
       mov a, temp_sound_state
 
-temp_sound_state0:
-      cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
-      jnb  playstart_flag, temp_sound_state0_done
-      clr C
-      mov a, 
+;temp_sound_state0:
+;      cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
+;      jnb  playstart_flag, temp_sound_state0_done
+;      clr C
+;      mov a,  
      
 Sound_Heating_To_Soak:
 	clr TR1 ; Stop Timer 1 ISR from playing previous request
@@ -896,16 +896,16 @@ Sound_Heating_To_Soak:
 	; Set the initial position in memory where to start playing
 	mov a, #0x00
 	lcall Send_SPI
-	mov a, #0xa8
+	mov a, #0x54
 	lcall Send_SPI
-	mov a, #0xd1
+	mov a, #0x81
 	lcall Send_SPI
 	mov a, #0x00 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0x66
-	mov w+0, #0x50
+	mov w+1, #0x33
+	mov w+0, #0x25
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
