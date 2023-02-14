@@ -63,7 +63,7 @@ org 0x0013
 
 ; Timer/Counter 1 overflow interrupt vector (not used in this code)
 org 0x001B
-	reti
+	ljmp Timer1_ISR
 
 ; Serial port receive/transmit interrupt vector (not used in this code)
 org 0x0023 
@@ -396,7 +396,7 @@ MainProgram:
 State_0:
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
-    lcall Sound_Heating_To_Soak
+    lcall read_state 
     cjne a, #0, State_1
 
     ; turn off the oven
@@ -409,7 +409,7 @@ State_0:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-    ; [sound saying the current state "Idle"]
+    lcall Sound_Heating_To_Soak; [sound saying the current state "Idle"]
 
     ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
@@ -417,7 +417,7 @@ State_0:
 Idle:
     ; check state
     jnb STATE_STABLE, $ ; wait for state to be stable
-    lcall Sound_Heating_To_Soak
+    lcall read_state
     cjne a, #0, State_1
     ; Read tempurature every second
     jnb seconds_flag, Idle_a
@@ -896,19 +896,20 @@ Sound_Heating_To_Soak:
 	; Set the initial position in memory where to start playing
 	mov a, #0x00
 	lcall Send_SPI
-	mov a, #0x54
+	mov a, #0x00
 	lcall Send_SPI
-	mov a, #0x81
+	mov a, #0x00
 	lcall Send_SPI
 	mov a, #0x00 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0x33
-	mov w+0, #0x25
+	mov w+1, #0x66
+	mov w+0, #0x41
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
+    ret
 
 Sound_Soaking:
 	clr TR1 ; Stop Timer 1 ISR from playing previous request
@@ -981,8 +982,8 @@ Sound_Reflowing:
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0x1f
-	mov w+0, #0x2b
+	mov w+1, #0xa5
+	mov w+0, #0xf4
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
