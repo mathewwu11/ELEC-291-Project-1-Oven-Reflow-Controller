@@ -95,6 +95,7 @@ mf:                 dbit 1 ; this dseg is used in the INC file, any changes to n
 hold_button:        dbit 1
 sound_flag:         dbit 1
 playstart_flag:      dbit 1 ;used in play temp
+PLAYDONE: dbit 1
 
 CSEG
 ; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
@@ -875,18 +876,68 @@ setup_done:
 
     ;-------------------------------------------------- SOUND ----------------------------------------------------
 ; NEED TO FIGURE OUT INDEX AND BYTES OF SOUNDS
+Play_Sound_Using_Index:
 
 play_temp: 
-      mov a, temp_sound_state
+    mov a, temp_sound_state
 
-;temp_sound_state0:
- ;     cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
- ;     jnb  playstart_flag, temp_sound_state0_done
- ;     clr C
- ;     mov a,  
- 
- 
- 
+temp_sound_state0:
+    cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
+    jnb  playstart_flag, temp_sound_state0_done
+    sjmp temp_sound_state1
+
+temp_sound_state0_done:
+    ret
+
+temp_sound_state1:
+    cjne a, #1, Sound_FSM_State2
+    clr c
+	mov a, temp
+    ;if T>=100, mov temp_sound_state, #2
+    ;else if T<100, mov temp_sound_state, #5
+	mov Sound_FSM_State, #2
+
+temp_sound_state2:
+    cjne a, #2, Sound_FSM_State3
+    ;if T>=200, lcall Play_Sound_Using_Index for 200
+    ;if T<200,  lcall Play_Sound_Using_Index for 100
+    mov Sound_FSM_State, #3
+
+temp_sound_state3:
+    cjne a, #3, Sound_FSM_State4
+    ;if PLAYDONE=0, mov Sound_FSM_State, #3
+    ;if PLAYDONE=1, mov Sound_FSM_State, #5
+
+temp_sound_state5:
+    cjne a, #5, Sound_FSM_State6
+    ;if (T%100)>=20, Sound_FSM_State, #8
+    ;else if (T%100)<20, Sound_FSM_State, #6
+
+temp_sound_state6:
+    cjne a, #6, Sound_FSM_State7
+    ;play(T%100)
+    mov Sound_FSM_State, #7
+
+temp_sound_state7:
+    cjne a, #7, Sound_FSM_State8
+    ;if PLAYDONE=0, mov Sound_FSM_State, #7
+    ;if PLAYDONE=1, mov Sound_FSM_State, #0
+
+temp_sound_state8:
+    cjne a, #8, Sound_FSM_State9
+    ;play '20', '30', '40'....
+    mov Sound_FSM_State, #9
+
+temp_sound_state9:
+    cjne a, #9, Sound_FSM_State10
+    ;if PLAYDONE=0, mov Sound_FSM_State, #9
+    ;if PLAYDONE=1, mov Sound_FSM_State, #10
+
+temp_sound_state10:
+    cjne a, #10, Sound_FSM_State0
+    ;play '1', '2', '3'...
+    mov Sound_FSM_State, #7
+     
 Sound_Idle:
     clr TR1 ; Stop Timer 1 ISR from playing previous request
 	setb FLASH_CE
@@ -1071,6 +1122,3 @@ Sound_Error:
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
     ret
-    
-
-    
