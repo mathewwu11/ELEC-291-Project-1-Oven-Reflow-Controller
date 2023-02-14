@@ -881,62 +881,62 @@ Play_Sound_Using_Index:
 play_temp: 
     mov a, temp_sound_state
 
-temp_sound_state0:
-    cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
-    jnb  playstart_flag, temp_sound_state0_done
-    sjmp temp_sound_state1
+;temp_sound_state0:
+   ; cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
+   ; jnb  playstart_flag, temp_sound_state0_done
+   ; sjmp temp_sound_state1
 
-temp_sound_state0_done:
-    ret
+;temp_sound_state0_done:
+    ;ret
 
-temp_sound_state1:
-    cjne a, #1, Sound_FSM_State2
-    clr c
-	mov a, temp
+;temp_sound_state1:
+    ;cjne a, #1, Sound_FSM_State2
+    ;clr c
+;	mov a, temp
     ;if T>=100, mov temp_sound_state, #2
     ;else if T<100, mov temp_sound_state, #5
-	mov Sound_FSM_State, #2
+;	mov Sound_FSM_State, #2
 
-temp_sound_state2:
-    cjne a, #2, Sound_FSM_State3
+;temp_sound_state2:
+   ; cjne a, #2, Sound_FSM_State3
     ;if T>=200, lcall Play_Sound_Using_Index for 200
     ;if T<200,  lcall Play_Sound_Using_Index for 100
-    mov Sound_FSM_State, #3
+   ; mov Sound_FSM_State, #3
 
-temp_sound_state3:
-    cjne a, #3, Sound_FSM_State4
+;temp_sound_state3:
+  ;  cjne a, #3, Sound_FSM_State4
     ;if PLAYDONE=0, mov Sound_FSM_State, #3
     ;if PLAYDONE=1, mov Sound_FSM_State, #5
 
-temp_sound_state5:
-    cjne a, #5, Sound_FSM_State6
+;temp_sound_state5:
+   ; cjne a, #5, Sound_FSM_State6
     ;if (T%100)>=20, Sound_FSM_State, #8
     ;else if (T%100)<20, Sound_FSM_State, #6
 
-temp_sound_state6:
-    cjne a, #6, Sound_FSM_State7
+;temp_sound_state6:
+  ;  cjne a, #6, Sound_FSM_State7
     ;play(T%100)
-    mov Sound_FSM_State, #7
+   ; mov Sound_FSM_State, #7
 
-temp_sound_state7:
-    cjne a, #7, Sound_FSM_State8
+;temp_sound_state7:
+  ;  cjne a, #7, Sound_FSM_State8
     ;if PLAYDONE=0, mov Sound_FSM_State, #7
     ;if PLAYDONE=1, mov Sound_FSM_State, #0
 
-temp_sound_state8:
-    cjne a, #8, Sound_FSM_State9
+;temp_sound_state8:
+   ; cjne a, #8, Sound_FSM_State9
     ;play '20', '30', '40'....
-    mov Sound_FSM_State, #9
+    ;mov Sound_FSM_State, #9
 
-temp_sound_state9:
-    cjne a, #9, Sound_FSM_State10
+;temp_sound_state9:
+   ; cjne a, #9, Sound_FSM_State10
     ;if PLAYDONE=0, mov Sound_FSM_State, #9
     ;if PLAYDONE=1, mov Sound_FSM_State, #10
 
-temp_sound_state10:
-    cjne a, #10, Sound_FSM_State0
-    ;play '1', '2', '3'...
-    mov Sound_FSM_State, #7
+;temp_sound_state10:
+    ;cjne a, #10, Sound_FSM_State0
+    ;;play '1', '2', '3'...
+   ; mov Sound_FSM_State, #7
      
 Sound_Idle:
     clr TR1 ; Stop Timer 1 ISR from playing previous request
@@ -947,18 +947,18 @@ Sound_Idle:
 	mov a, #READ_BYTES
 	lcall Send_SPI
 	; Set the initial position in memory where to start playing
-	mov a, #0x13
+	mov a, #0x00
 	lcall Send_SPI
-	mov a, #0xd0
+	mov a, #0x39
 	lcall Send_SPI
-	mov a, #0xc0
+	mov a, #0x37
 	lcall Send_SPI
-	mov a, #0x13 ; Request first byte to send to DAC
+	mov a, #0x00 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0xa6
-	mov w+0, #0x65
+	mov w+1, #0xab
+	mov w+0, #0x26
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
@@ -1122,3 +1122,5 @@ Sound_Error:
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
     ret
+    
+    
