@@ -409,7 +409,7 @@ State_0:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-    lcall Sound_Heating_To_Soak; [sound saying the current state "Idle"]
+    lcall Sound_Idle; [sound saying the current state "Idle"]
 
     ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
@@ -451,7 +451,7 @@ State_1:
     lcall hex2bcd
     Display_temp_BCD(2,8)
 
-    ; [Sound for saying the current state "Heating to soak"]
+    ljmp Sound_Heating_To_Soak ; [Sound for saying the current state "Heating to soak"]
     sjmp Heating_To_Soak
 
 Jump_State_2:   ; ljmp to state 2
@@ -468,7 +468,7 @@ Heating_To_Soak_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Soak_b
     clr five_seconds_flag
-    ; [function to play sound here]
+    ljmp play_temp; [function to play sound here]
 Heating_To_Soak_b:
     ; if temperature >= reflow temperature, TEMP_OK = 0
     ; else 1
@@ -497,7 +497,7 @@ State_2:
     lcall read_state
     cjne a, #2, State_3
 
-    ; [sound saying the current state "Soaking"]
+    ljmp Sound_Soaking; [sound saying the current state "Soaking"]
 
 Soaking:
     ; read temperature every second
@@ -510,7 +510,7 @@ Soaking_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Soaking_b
     clr five_seconds_flag
-    ; [function to play sound here]
+    ljmp play_temp; [function to play sound here]
 Soaking_b:
     ; compare temperature to soaktemp
     Load_X(0)
@@ -550,7 +550,7 @@ State_3:
     lcall hex2bcd
     Display_temp_BCD(2,8)
 
-    ; [sound saying the current state "Heating to reflow"]
+    ljmp Sound_Heating_To_Reflow; [sound saying the current state "Heating to reflow"]
     sjmp Heating_To_Reflow
 
 Jump_State_4:   ; ljmp to state 4
@@ -567,7 +567,7 @@ Heating_To_Reflow_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Reflow_b
     clr five_seconds_flag
-    ; [function to play sound here]
+    ljmp play_temp; [function to play sound here]
 Heating_To_Reflow_b:
     Load_X(0)
     Load_Y(0)
@@ -591,7 +591,7 @@ State_4:
     lcall read_state
     cjne a, #4, State_5
 
-    ; [Sound saying the current state "Reflowing"]
+    ljmp Sound_Reflowing ;[Sound saying the current state "Reflowing"]
 
 Reflowing:
     ; read temperature every second
@@ -604,7 +604,7 @@ Reflowing_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Reflowing_b
     clr five_seconds_flag
-    ; [function to play sound here]
+    ljmp play_temp ; [function to play sound here]
 Reflowing_b:
     Load_X(0)
     Load_Y(0)
@@ -642,7 +642,7 @@ State_5:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-    ; [Sound saying current state "Cooldown"]
+    ljmp Sound_Cooldown; [Sound saying current state "Cooldown"]
     sjmp Cooldown
 
 State_6:
@@ -658,7 +658,7 @@ State_6:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-    ; [Sound saying current state "Error"]
+    ljmp Sound_Error; [Sound saying current state "Error"]
     sjmp Cooldown
 
 Jump_State_0:
@@ -675,7 +675,7 @@ Cooldown_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Cooldown_b
     clr five_seconds_flag
-    ; [function to play sound here]
+    ljmp play_temp ; [function to play sound here]
 Cooldown_b:
     Load_X(0)
     Load_Y(50)
@@ -880,10 +880,39 @@ play_temp:
       mov a, temp_sound_state
 
 ;temp_sound_state0:
-;      cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
-;      jnb  playstart_flag, temp_sound_state0_done
-;      clr C
-;      mov a,  
+ ;     cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
+ ;     jnb  playstart_flag, temp_sound_state0_done
+ ;     clr C
+ ;     mov a,  
+ 
+ 
+ 
+Sound_Idle:
+    clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory where to start playing
+	mov a, #0x13
+	lcall Send_SPI
+	mov a, #0xd0
+	lcall Send_SPI
+	mov a, #0xc0
+	lcall Send_SPI
+	mov a, #0x13 ; Request first byte to send to DAC
+	lcall Send_SPI
+	
+	mov w+2, #0x00
+	mov w+1, #0xa6
+	mov w+0, #0x65
+	
+	setb SPEAKER ; Turn on speaker.
+	setb TR1 ; Start playback by enabling Timer 1
+    ret
+
      
 Sound_Heating_To_Soak:
 	clr TR1 ; Stop Timer 1 ISR from playing previous request
@@ -894,18 +923,18 @@ Sound_Heating_To_Soak:
 	mov a, #READ_BYTES
 	lcall Send_SPI
 	; Set the initial position in memory where to start playing
-	mov a, #0x00
+	mov a, #0x14
 	lcall Send_SPI
-	mov a, #0x00
+	mov a, #0x77
 	lcall Send_SPI
-	mov a, #0x00
+	mov a, #0x25
 	lcall Send_SPI
-	mov a, #0x00 ; Request first byte to send to DAC
+	mov a, #0x14 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0x66
-	mov w+0, #0x41
+	mov w+1, #0xbe
+	mov w+0, #0x2c
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
@@ -920,18 +949,18 @@ Sound_Soaking:
 	mov a, #READ_BYTES
 	lcall Send_SPI
 	; Set the initial position in memory where to start playing
-	mov a, #0x01
+	mov a, #0x15
 	lcall Send_SPI
-	mov a, #0x0f
+	mov a, #0x35
 	lcall Send_SPI
-	mov a, #0x21
+	mov a, #0x51
 	lcall Send_SPI
-	mov a, #0x00 ; Request first byte to send to DAC
+	mov a, #0x15 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
-	mov w+2, #0x01
-	mov w+1, #0x4b
-	mov w+0, #0xe7
+	mov w+2, #0x00
+	mov w+1, #0x98
+	mov w+0, #0x21
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
@@ -946,18 +975,18 @@ Sound_Heating_To_Reflow:
 	mov a, #READ_BYTES
 	lcall Send_SPI
 	; Set the initial position in memory where to start playing
-	mov a, #0x02
+	mov a, #0x15
 	lcall Send_SPI
-	mov a, #0x5b
+	mov a, #0xcd
 	lcall Send_SPI
-	mov a, #0x08
+	mov a, #0x72
 	lcall Send_SPI
-	mov a, #0x00 ; Request first byte to send to DAC
+	mov a, #0x15 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
-	mov w+2, #0x
-	mov w+1, #0x47
-	mov w+0, #0x5a
+	mov w+2, #0x00
+	mov w+1, #0xbe
+	mov w+0, #0x19
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
@@ -972,18 +1001,19 @@ Sound_Reflowing:
 	mov a, #READ_BYTES
 	lcall Send_SPI
 	; Set the initial position in memory where to start playing
-	mov a, #0x01
+	;40
+	mov a, #0x16
 	lcall Send_SPI
-	mov a, #0x28
+	mov a, #0x8b
 	lcall Send_SPI
-	mov a, #0x07
+	mov a, #0x8b
 	lcall Send_SPI
-	mov a, #0x01 ; Request first byte to send to DAC
+	mov a, #0x16 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0xa5
-	mov w+0, #0xf4
+	mov w+1, #0x9f
+	mov w+0, #0x53
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
@@ -998,18 +1028,19 @@ Sound_Cooldown:
 	mov a, #READ_BYTES
 	lcall Send_SPI
 	; Set the initial position in memory where to start playing
-	mov a, #0x01
+	;41
+	mov a, #0x17
 	lcall Send_SPI
-	mov a, #0x47
+	mov a, #0x2a
 	lcall Send_SPI
-	mov a, #0x32
+	mov a, #0xde
 	lcall Send_SPI
-	mov a, #0x01 ; Request first byte to send to DAC
+	mov a, #0x17 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0xc3
-	mov w+0, #0x35
+	mov w+1, #0xab
+	mov w+0, #0x27
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
@@ -1024,18 +1055,18 @@ Sound_Error:
 	mov a, #READ_BYTES
 	lcall Send_SPI
 	; Set the initial position in memory where to start playing
-	mov a, #0x02
+	mov a, #0x17
 	lcall Send_SPI
-	mov a, #0x0b
+	mov a, #0xd6
 	lcall Send_SPI
-	mov a, #0x67
+	mov a, #0x05
 	lcall Send_SPI
-	mov a, #0x02 ; Request first byte to send to DAC
+	mov a, #0x17 ; Request first byte to send to DAC
 	lcall Send_SPI
 	
 	mov w+2, #0x00
-	mov w+1, #0xf5
-	mov w+0, #0x28
+	mov w+1, #0xa8
+	mov w+0, #0xc7
 	
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
