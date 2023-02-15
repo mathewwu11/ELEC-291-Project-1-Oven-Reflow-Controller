@@ -411,6 +411,9 @@ MainProgram:
     clr hold_button
     setb play_done
 
+    mov temp_reading, #0
+    mov prev_temp_reading, #0
+
     mov count1ms+0, #0
     mov count1ms+0, #0
     ; defualt soaktemp = 150
