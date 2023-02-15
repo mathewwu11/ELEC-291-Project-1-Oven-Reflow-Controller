@@ -61,7 +61,7 @@ org 0x000B
 org 0x0013
 	reti
 
-; Timer/Counter 1 overflow interrupt vector (not used in this code)
+; Timer/Counter 1 overflow interrupt vector
 org 0x001B
 	ljmp Timer1_ISR
 
@@ -117,6 +117,7 @@ $NOLIST
 $include(LCD_4bit.inc)
 $include(math32.inc)
 $include(Temp.inc)
+$include(Sound.inc)
 $LIST
 
 ;                   1234567890123456
@@ -242,50 +243,6 @@ Timer0_ISR:
 Start_Chirping:
 	cpl SPEAKER 
 	reti
-;-------------------------------------;
-; ISR for Timer 1.  Used to playback  ;
-; the WAV file stored in the SPI      ;
-; flash memory.                       ;
-;-------------------------------------;
-Timer1_ISR:
-	; The registers used in the ISR must be saved in the stack
-	push acc
-	push psw
-	
-	; Check if the play counter is zero.  If so, stop playing sound.
-	mov a, w+0
-	orl a, w+1
-	orl a, w+2
-	jz stop_playing
-	
-	; Decrement play counter 'w'.  In this implementation 'w' is a 24-bit counter.
-	mov a, #0xff
-	dec w+0
-	cjne a, w+0, keep_playing
-	dec w+1
-	cjne a, w+1, keep_playing
-	dec w+2
-	
-keep_playing:
-	setb SPEAKER
-	lcall Send_SPI ; Read the next byte from the SPI Flash...
-	mov P0, a ; WARNING: Remove this if not using an external DAC to use the pins of P0 as GPIO
-	add a, #0x80
-	mov DADH, a ; Output to DAC. DAC output is pin P2.3
-	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
-	sjmp Timer1_ISR_Done
-
-stop_playing:
-	clr TR1 ; Stop timer 1
-	setb FLASH_CE  ; Disable SPI Flash
-	clr SPEAKER ; Turn off speaker.  Removes hissing noise when not playing sound.
-	mov DADH, #0x80 ; middle of range
-	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
-
-Timer1_ISR_Done:	
-	pop psw
-	pop acc
-	reti
 
 ;---------------------------------;
 ; Sends AND receives a byte via   ;
@@ -313,6 +270,10 @@ Send_SPI:
 
 	ret
 
+;---------------------------------;
+; Routine to initialize the ISR   ;
+; for timer 1                     ;
+;---------------------------------;
 Timer1_Init:
 	; Configure P2.0, P2.4, P2.5 as open drain outputs
 	orl P2M0, #0b_0011_0001
@@ -333,7 +294,7 @@ Timer1_Init:
 
 	; Enable the timer and interrupts
     setb ET1  ; Enable timer 1 interrupt
-	; setb TR1 ; Timer 1 is only enabled to play stored sound
+	clr TR1 ; Timer 1 is only enabled to play stored sound
 
 	; Configure the DAC.  The DAC output we are using is P2.3, but P2.2 is also reserved.
 	mov DADI, #0b_1010_0000 ; ACON=1
@@ -390,8 +351,54 @@ INIT_SPI:
     clr MY_SCLK     ; For mode (0,0) SCLK is zero
     ret
 
+;-------------------------------------;
+; ISR for Timer 1.  Used to playback  ;
+; the WAV file stored in the SPI      ;
+; flash memory.                       ;
+;-------------------------------------;
+Timer1_ISR:
+	; The registers used in the ISR must be saved in the stack
+	push acc
+	push psw
+	
+	; Check if the play counter is zero.  If so, stop playing sound.
+	mov a, w+0
+	orl a, w+1
+	orl a, w+2
+	jz stop_playing
+	
+	; Decrement play counter 'w'.  In this implementation 'w' is a 24-bit counter.
+	mov a, #0xff
+	dec w+0
+	cjne a, w+0, keep_playing
+	dec w+1
+	cjne a, w+1, keep_playing
+	dec w+2
+	
+keep_playing:
+	setb SPEAKER
+	lcall Send_SPI ; Read the next byte from the SPI Flash...
+	mov P0, a ; WARNING: Remove this if not using an external DAC to use the pins of P0 as GPIO
+	add a, #0x80
+	mov DADH, a ; Output to DAC. DAC output is pin P2.3
+	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+	sjmp Timer1_ISR_Done
+
+stop_playing:
+	clr TR1 ; Stop timer 1
+	setb FLASH_CE  ; Disable SPI Flash
+	clr SPEAKER ; Turn off speaker.  Removes hissing noise when not playing sound.
+	mov DADH, #0x80 ; middle of range
+	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
+
+Timer1_ISR_Done:	
+	pop psw
+	pop acc
+	reti
+
 ;---------------------------------;
 ; ISR for timer 2                 ;
+; Used to count Time              ;
 ;---------------------------------;
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
@@ -496,8 +503,8 @@ State_0:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-    ;lcall Sound_Idle; [sound saying the current state "Idle"]
-    mov r0,#29
+    ; play sound "Idle"
+    mov r0, #29
     lcall Play_Sound_Using_Index
     ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
@@ -512,7 +519,7 @@ Idle:
     clr seconds_flag
     lcall Read_ADC
     lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    lcall Send_temp_BCD ; display/send temperature to LCD/PuTTY
 Idle_a:
     ; if BOOT_BUTTON is pressed, jump to setup
     jb BOOT_BUTTON, Idle
@@ -539,8 +546,8 @@ State_1:
     lcall hex2bcd
     Display_temp_BCD(2,8)
 
-    ; [Sound for saying the current state "Heating to soak"]
-    mov r0,#30
+    ; play sound "Heating to soak"
+    mov r0, #30
     lcall Play_Sound_Using_Index
     sjmp Heating_To_Soak
 
@@ -553,7 +560,7 @@ Heating_To_Soak:
     clr seconds_flag
     lcall Read_ADC
     lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    lcall Send_temp_BCD ; display/send temperature to LCD/PuTTY
 Heating_To_Soak_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Soak_b
@@ -587,8 +594,8 @@ State_2:
     lcall read_state
     cjne a, #2, State_3
 
-    ; [sound saying the current state "Soaking"]
-    mov r0,#31
+    ; play sound "Soaking"
+    mov r0, #31
     lcall Play_Sound_Using_Index
 
 Soaking:
@@ -597,7 +604,7 @@ Soaking:
     clr seconds_flag
     lcall Read_ADC
     lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    lcall Send_temp_BCD ; display/send temperature to LCD/PuTTY
 Soaking_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Soaking_b
@@ -642,8 +649,8 @@ State_3:
     lcall hex2bcd
     Display_temp_BCD(2,8)
 
-    ; [sound saying the current state "Heating to reflow"]
-    mov r0,#32
+    ; play sound "Heating to reflow"
+    mov r0, #32
     lcall Play_Sound_Using_Index
     sjmp Heating_To_Reflow
 
@@ -656,7 +663,7 @@ Heating_To_Reflow:
     clr seconds_flag
     lcall Read_ADC
     lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    lcall Send_temp_BCD ; display/send temperature to LCD/PuTTY
 Heating_To_Reflow_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Reflow_b
@@ -685,7 +692,7 @@ State_4:
     lcall read_state
     cjne a, #4, State_5
 
-    ;[Sound saying the current state "Reflowing"]
+    ; play sound "Reflowing"
     mov r0, #33
     ljmp Play_Sound_Using_Index 
 
@@ -695,7 +702,7 @@ Reflowing:
     clr seconds_flag
     lcall Read_ADC
     lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    lcall Send_temp_BCD ; display/send temperature to LCD/PuTTY
 Reflowing_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Reflowing_b
@@ -738,8 +745,9 @@ State_5:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
+    ; play sound "Cooldown"
     mov r0, #34 ; moves the index for cooling into r0
-    lcall Play_Sound_Using_Index; [Sound saying current state "Cooldown"]
+    lcall Play_Sound_Using_Index
     sjmp Cooldown
 
 State_6:
@@ -755,9 +763,9 @@ State_6:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-
+    ; play sound "Error"
     mov r0, #35 ; moves the index for error into r0
-    lcall Play_Sound_Using_Index; [Sound saying current state "Error"]
+    lcall Play_Sound_Using_Index
     sjmp Cooldown
 
 Jump_State_0:
@@ -769,7 +777,7 @@ Cooldown:
     clr seconds_flag
     lcall Read_ADC
     lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
-    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+    lcall Send_temp_BCD ; display/send temperature to LCD/PuTTY
 Cooldown_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Cooldown_b
@@ -971,341 +979,3 @@ setup_done:
     lcall Read_ADC
     Display_temp_BCD(1,8)
     ljmp State_0
-
-    ;-------------------------------------------------- SOUND ----------------------------------------------------
-; NEED TO FIGURE OUT INDEX AND BYTES OF SOUNDS
-Play_Sound_Using_Index:
-    clr TR1 ; Stop Timer 1 ISR from playing previous request
-	setb FLASH_CE
-	clr SPEAKER ; Turn off speaker.
-	
-	clr FLASH_CE ; Enable SPI Flash
-    mov a, #READ_BYTES
-	lcall Send_SPI
-
-    mov dptr, #sound_index ; The beginning of the index (3 bytes per entry)
-
-    ; multiply R0 by 3 and add it to the dptr
-    mov a, R0
-    mov b, #3
-    mul ab
-    add a, dpl
-    mov dpl, a
-    mov a, b
-    addc a, dph
-    mov dph, a
-
-    ; dptr is pointing to the MSB of the 24-bit flash memory address
-    clr a
-    movc a, @a+dptr
-    lcall Send_SPI
-
-    inc dptr
-    clr a
-    movc a, @a+dptr
-    lcall Send_SPI
-
-    inc dptr
-    clr a
-    movc a, @a+dptr
-    lcall Send_SPI
-
-    ; Now set how many bytes to play
-    mov dptr, #Size_sound
-    ; multiply R0 by 3 and add it to the dptr
-    mov a, R0
-    mov b, #3
-    mul ab
-    add a, dpl
-    mov dpl, a
-    mov a, b
-    addc a, dph
-    mov dph, a
-
-    clr a
-    movc a, @a+dptr
-    mov w+2,a
-
-    inc dptr
-    clr a
-    movc a, @a+dptr
-    mov w+1,a
-
-    inc dptr
-    clr a
-    movc a, @a+dptr
-    mov w+0,a
-
-    setb SPEAKER ; Turn on speaker.
-    setb TR1 ; Start playback by enabling Timer 1
-    ret
-
-
-Play_Temp_Sound:
-    Load_X(0)   ; clears all the bits of x
-
-    ; first checking if "200" sound needs to be played
-    mov x+0, temp_reading   ; loads temp_reading into x
-    Load_Y(200) ; loads 200 into y
-    lcall x_gteq_y    ; checks if x >= y
-    jnb mf, Checking_Sound_100
-    mov r0, #28; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_90; jump to Checking_90
-
-Checking_Sound_100:
-    Load_Y(100)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_90
-    mov r0, #27; load sound index for 100 in r0
-    lcall Play_Sound_Using_Index; play the sound for 100
-    lcall sub32; subtract 100 from x
-    ljmp Checking_Sound_90; jump to Checking_90
-
-Checking_Sound_90:
-    Load_Y(90)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_80
-    mov r0, #26; load sound index for 90 in r0
-    lcall Play_Sound_Using_Index; play the sound for 90
-    lcall sub32; subtract 90 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_80:
-    Load_Y(80)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_70
-    mov r0, #25; load sound index for 80 in r0
-    lcall Play_Sound_Using_Index; play the sound for 80
-    lcall sub32; subtract 80 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_70:
-    Load_Y(70)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_60
-    mov r0, #24; load sound index for 70 in r0
-    lcall Play_Sound_Using_Index; play the sound for 70
-    lcall sub32; subtract 70 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_60:
-    Load_Y(60)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_50
-    mov r0, #23; load sound index for 60 in r0
-    lcall Play_Sound_Using_Index; play the sound for 70
-    lcall sub32; subtract 70 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_50:
-    Load_Y(50)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_40
-    mov r0, #22; load sound index for 50 in r0
-    lcall Play_Sound_Using_Index; play the sound for 50
-    lcall sub32; subtract 50 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_40:
-    Load_Y(40)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_30
-    mov r0, #21; load sound index for 40 in r0
-    lcall Play_Sound_Using_Index; play the sound for 40
-    lcall sub32; subtract 40 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_30:
-    Load_Y(30)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_20
-    mov r0, #20; load sound index for 30 in r0
-    lcall Play_Sound_Using_Index; play the sound for 20
-    lcall sub32; subtract 30 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_20:
-    Load_Y(20)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_19
-    mov r0, #19; load sound index for 20 in r0
-    lcall Play_Sound_Using_Index; play the sound for 20
-    lcall sub32; subtract 20 from x
-    ljmp Checking_Sound_9; jump to Checking_9
-
-Checking_Sound_19:
-    Load_Y(19)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_18
-    mov r0, #18; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_18:
-    Load_Y(18)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_17
-    mov r0, #17; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_17:
-    Load_Y(17)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_16
-    mov r0, #16; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_16:
-    Load_Y(16)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_15
-    mov r0, #15; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_15:
-    Load_Y(15)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_14
-    mov r0, #14; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checkincg_90
-
-Checking_Sound_14:
-    Load_Y(14)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_13
-    mov r0, #13; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_13:
-    Load_Y(13)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_12
-    mov r0, #12; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_12:
-    Load_Y(12)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_11
-    mov r0, #11; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-
-Checking_Sound_11:
-    Load_Y(11)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_10
-    mov r0, #10; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_10:
-    Load_Y(10)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_9
-    mov r0, #9; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_9:
-    Load_Y(9)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_8
-    mov r0, #8; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_8:
-    Load_Y(8)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_7
-    mov r0, #7; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_7:
-    Load_Y(7)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_6
-    mov r0, #6; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_6:
-    Load_Y(6)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_5
-    mov r0, #5; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_5:
-    Load_Y(5)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_4
-    mov r0, #4; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_4:
-    Load_Y(4)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_3
-    mov r0, #3; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_3:
-    Load_Y(3)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_2
-    mov r0, #2; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_2:
-    Load_Y(2)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_1
-    mov r0, #1; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_1:
-    Load_Y(1)
-    lcall x_gteq_y
-    jnb mf, Checking_Sound_Return
-    mov r0, #0; load sound index for 200 in r0
-    lcall Play_Sound_Using_Index; play the sound for 200
-    lcall sub32; subtract 200 from x
-    ljmp Checking_Sound_Return; jump to Checking_90
-
-Checking_Sound_Return:
-    ret
