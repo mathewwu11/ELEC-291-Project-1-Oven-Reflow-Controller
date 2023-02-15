@@ -182,7 +182,7 @@ Volt_To_Temp:
 
 	; save new temperature reading
 	mov temp_reading, x+0
-	
+
 	; if previous temperature reading == 0, jump to Volt_To_Temp_a
 	mov a, prev_temp_reading
 	jz Volt_To_Temp_a
@@ -200,7 +200,7 @@ Volt_To_Temp:
 	; keep previous temperature reading
 	mov temp_reading, prev_temp_reading
 
-Volt_To_Temp_a
+Volt_To_Temp_a:
 	Load_X(0)
 	mov x+0, temp_reading
 	lcall hex2bcd
