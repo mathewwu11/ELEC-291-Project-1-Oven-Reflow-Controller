@@ -14,6 +14,7 @@ Left_blank_%M_b:
 	Display_char(#' ')
 endmac
 
+; Displays 4-digit BCD
 Display_temp_BCD mac
 	Set_Cursor(%0, %1)
 	Display_BCD(bcd+1)
@@ -56,7 +57,7 @@ endmac
 
 ; Displays 4-digit BCD number & 
 ; sends 10-digit BCD number in bcd to PuTTY in ASCII
-Send_10_digit_BCD:
+Send_temp_BCD:
 	Display_temp_BCD(1,8)
     Send_BCD(bcd+4)
     Send_BCD(bcd+3)
@@ -157,6 +158,9 @@ Volt_To_Temp:
 
 	ret
 
+; Checks if temperature is >= 50
+; if temperature >= 50, TEMP_50 = 1
+; else 0
 Check_50:
 	Load_X(0)
 	mov x+0, temp_reading
