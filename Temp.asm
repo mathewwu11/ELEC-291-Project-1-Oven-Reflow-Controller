@@ -83,7 +83,7 @@ soaktemp:           ds 1
 reflowtemp:         ds 1
 volt_reading:       ds 2 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 temp_reading:       ds 1
-fsm_state:          ds 1 
+prev_temp_reading:  ds 1
 w:   				ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
 
 
@@ -92,7 +92,6 @@ seconds_flag:       dbit 1
 five_seconds_flag:  dbit 1
 mf:                 dbit 1 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 hold_button:        dbit 1
-sound_flag:         dbit 1
 play_done:          dbit 1
 
 CSEG

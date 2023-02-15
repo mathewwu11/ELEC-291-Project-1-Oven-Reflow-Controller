@@ -164,6 +164,8 @@ read_state:
 
 ; Converts the voltage reading in the from the ADC to its corresponding temperature
 Volt_To_Temp:
+	; save previous temperature reading
+	mov prev_temp_reading, temp_reading
 	mov x+0, volt_reading+0
 	mov x+1, volt_reading+1
 	mov x+2, #0
@@ -178,9 +180,30 @@ Volt_To_Temp:
     Load_y(22)
     lcall add32
 
+	; save new temperature reading
 	mov temp_reading, x+0
-	lcall hex2bcd
+	
+	; if previous temperature reading == 0, jump to Volt_To_Temp_a
+	mov a, prev_temp_reading
+	jz Volt_To_Temp_a
 
+	; load previous temperature reading into y
+	Load_Y(prev_temp_reading)
+
+	; if x/y >= 2, keep previous temperature reading
+	; else keep new temperature reading
+	lcall div32
+	Load_Y(2)
+	lcall x_gteq_y
+	jnb mf, Volt_To_Temp_a
+
+	; keep previous temperature reading
+	mov temp_reading, prev_temp_reading
+
+Volt_To_Temp_a
+	Load_X(0)
+	mov x+0, temp_reading
+	lcall hex2bcd
 	ret
 
 Check_50:
