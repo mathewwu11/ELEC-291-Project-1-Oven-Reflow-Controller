@@ -192,9 +192,9 @@ MainProgram:
     mov reflowtime+1, #0
     mov reflowtime_BCD+0, #0x30
     mov reflowtime_BCD+1, #0
-    ; max_heat_time = 1 minutes
+    ; max_heat_time = 10 minutes
     mov max_heat_time+0, #0
-    mov max_heat_time+1, #1
+    mov max_heat_time+1, #10
 
     ljmp setup ; jump to setup after reset
 
@@ -287,7 +287,7 @@ Heating_To_Soak:
 Heating_To_Soak_a:
     ; if temperature != soak temperature after 3 minutes, jump to State_6 (Error)
     mov a, uptime+1
-    cjne a, #0x3, Heating_To_Soak_b
+    cjne a, #0x10, Heating_To_Soak_b
     ljmp State_6
 Heating_To_Soak_b:
     ; if temperature == soak temperature, jump to State_2 (soaking)
