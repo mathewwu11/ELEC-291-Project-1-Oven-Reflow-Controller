@@ -71,10 +71,7 @@ Send_10_digit_BCD:
 	
 ; Reads the output voltage from the ADC and stores it in volt_reading
 Read_ADC:
-	lcall InitSerialPort
-	lcall INIT_SPI
-
-    clr CE_ADC
+	clr CE_ADC
     mov R0, #00000001B ; Start bit:1
     lcall DO_SPI_G
 
