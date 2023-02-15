@@ -61,8 +61,16 @@ Play_Sound_Using_Index:
     setb SPEAKER ; Turn on speaker.
     setb TR1 ; Start playback by enabling Timer 1
     clr play_done
-    ; wait for timer 1 to finish playing previous request
-    jnb play_done, $
+; wait for timer 1 to finish playing previous request
+wait_play_done:
+    ; read temperature every second
+    jnb seconds_flag, wait_play_done_a
+    clr seconds_flag
+    lcall Read_ADC
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
+wait_play_done_a:
+    jnb play_done, wait_play_done
     ret
 
 Play_Temp_Sound:
