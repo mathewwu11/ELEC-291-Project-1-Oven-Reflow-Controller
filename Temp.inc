@@ -204,7 +204,6 @@ Volt_To_Temp_a:
 	Load_X(0)
 	mov x+0, temp_reading
 	lcall hex2bcd
-	lcall Send_10_digit_BCD
 	ret
 
 Check_50:

@@ -359,8 +359,6 @@ Inc_Done:
 	
 	; 1 second has passed. Set a flag so the main program knows
 	setb seconds_flag ; Let the main program know 1 second has passed
-    lcall Read_ADC
-    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
 	clr a
 	mov Count1ms+0, a
 	mov Count1ms+1, a
@@ -413,9 +411,6 @@ MainProgram:
     clr hold_button
     setb play_done
 
-    mov temp_reading, #0
-    mov prev_temp_reading, #0
-
     mov count1ms+0, #0
     mov count1ms+0, #0
     ; defualt soaktemp = 150
@@ -454,6 +449,12 @@ Idle:
     jnb STATE_STABLE, $ ; wait for state to be stable
     lcall read_state
     cjne a, #0, State_1
+    ; Read tempurature every second
+    jnb seconds_flag, Idle_a
+    clr seconds_flag
+    lcall Read_ADC
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
 Idle_a:
     ; if BOOT_BUTTON is pressed, jump to setup
     jb BOOT_BUTTON, Idle
@@ -489,6 +490,12 @@ Jump_State_2:   ; ljmp to state 2
     ljmp State_2
 
 Heating_To_Soak:
+    ; read temperature every second
+    jnb seconds_flag, Heating_To_Soak_a
+    clr seconds_flag
+    lcall Read_ADC
+    lcall Volt_To_Temp ; convert the voltage reading into temperature and store in temp_reading
+    lcall Send_10_digit_BCD ; display/send temperature to LCD/PuTTY
 Heating_To_Soak_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Soak_b
@@ -732,7 +739,6 @@ Cooldown_d:
 
 ;-------------------------------------------------- SETUP ----------------------------------------------------
 setup:
-    clr TR2
     ; temperature not set, TEMP_OK = 0
     clr TEMP_OK
     ; prints "SOAK" left aligned in the top row
@@ -905,7 +911,5 @@ setup_done:
     Set_Cursor(1,1)
     Send_Constant_String(#CURRENT_TEMP)
     lcall Read_ADC
-    lcall Volt_To_Temp
     Display_temp_BCD(1,8)
-    setb TR2
     ljmp State_0
