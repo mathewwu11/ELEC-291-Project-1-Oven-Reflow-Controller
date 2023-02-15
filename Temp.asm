@@ -85,7 +85,7 @@ volt_reading:       ds 2 ; this dseg is used in the INC file, any changes to nam
 temp_reading:       ds 1
 fsm_state:          ds 1 
 w:   				ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
-temp_sound_state:     ds 1 
+temp_sound_state:   ds 1 
 
 
 BSEG
@@ -94,8 +94,7 @@ five_seconds_flag:  dbit 1
 mf:                 dbit 1 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 hold_button:        dbit 1
 sound_flag:         dbit 1
-playstart_flag:      dbit 1 ;used in play temp
-PLAYDONE: dbit 1
+play_done:          dbit 1
 
 CSEG
 ; These ’EQU’ must match the wiring between the microcontroller and ADC (used in the INC file)
@@ -281,6 +280,7 @@ check_DAC_init:
 	mov a, DADC
 	jb acc.6, check_DAC_init ; Wait for DAC to finish
 	setb EA ; Enable interrupts
+    ret
 
 ;---------------------------------;
 ; Routine to initialize the ISR   ;
@@ -334,7 +334,10 @@ Timer1_ISR:
 	; The registers used in the ISR must be saved in the stack
 	push acc
 	push psw
-	
+
+    ; Timer 1 is playing a sound. Set a flag so the main program knows
+	clr play_done
+
 	; Check if the play counter is zero.  If so, stop playing sound.
 	mov a, w+0
 	orl a, w+1
@@ -365,7 +368,10 @@ stop_playing:
 	mov DADH, #0x80 ; middle of range
 	orl DADC, #0b_0100_0000 ; Start DAC by setting GO/BSY=1
 
-Timer1_ISR_Done:	
+    ; Timer 1 has finished playing a sound. Set a flag so the main program knows	
+    setb play_done
+
+Timer1_ISR_Done:
 	pop psw
 	pop acc
 	reti
@@ -539,7 +545,7 @@ Heating_To_Soak_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Soak_b
     clr five_seconds_flag
-    ;lcall Play_Temp_Sound; [function to play sound here]
+    lcall Play_Temp_Sound; [function to play sound here]
 Heating_To_Soak_b:
     ; if temperature >= reflow temperature, TEMP_OK = 0
     ; else 1
@@ -681,7 +687,7 @@ Reflowing_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Reflowing_b
     clr five_seconds_flag
-    ;lcall Play_Temp_Sound ; [function to play sound here]
+    lcall Play_Temp_Sound ; [function to play sound here]
 Reflowing_b:
     Load_X(0)
     Load_Y(0)
@@ -756,7 +762,7 @@ Cooldown_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Cooldown_b
     clr five_seconds_flag
-    ;lcall Play_Temp_Sound ; [function to play sound here] NOT FUNCTIONAL
+    lcall Play_Temp_Sound ; [function to play sound here] NOT FUNCTIONAL
 Cooldown_b:
     Load_X(0)
     Load_Y(50)

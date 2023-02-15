@@ -2,9 +2,12 @@
 ; NEED TO FIGURE OUT INDEX AND BYTES OF SOUNDS
 
 Play_Sound_Using_Index:
-    clr TR1 ; Stop Timer 1 ISR from playing previous request
-	setb FLASH_CE
-	clr SPEAKER ; Turn off speaker.
+    ; clr TR1 ; Stop Timer 1 ISR from playing previous request
+	; setb FLASH_CE
+	; clr SPEAKER ; Turn off speaker.
+
+    ; wait for timer 1 to finish playing previous request
+    jnb play_done, $
 	
 	clr FLASH_CE ; Enable SPI Flash
     mov a, #READ_BYTES
@@ -362,3 +365,5 @@ Checking_Sound_1:
 
 Checking_Sound_Return:
     ret
+
+    
