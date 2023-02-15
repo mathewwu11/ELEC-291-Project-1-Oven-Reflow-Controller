@@ -83,7 +83,6 @@ soaktemp:           ds 1
 reflowtemp:         ds 1
 volt_reading:       ds 2 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 temp_reading:       ds 1
-prev_temp_reading:  ds 1
 w:   				ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
 
 

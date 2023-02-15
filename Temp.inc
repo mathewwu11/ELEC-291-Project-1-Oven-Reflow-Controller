@@ -71,6 +71,9 @@ Send_10_digit_BCD:
 	
 ; Reads the output voltage from the ADC and stores it in volt_reading
 Read_ADC:
+	lcall InitSerialPort
+	lcall INIT_SPI
+	
     clr CE_ADC
     mov R0, #00000001B ; Start bit:1
     lcall DO_SPI_G
@@ -180,29 +183,7 @@ Volt_To_Temp:
     Load_y(22)
     lcall add32
 
-	; save new temperature reading
 	mov temp_reading, x+0
-
-	; if previous temperature reading == 0, jump to Volt_To_Temp_a
-	mov a, prev_temp_reading
-	jz Volt_To_Temp_a
-
-	; load previous temperature reading into y
-	Load_Y(prev_temp_reading)
-
-	; if x/y >= 2, keep previous temperature reading
-	; else keep new temperature reading
-	lcall div32
-	Load_Y(2)
-	lcall x_gteq_y
-	jnb mf, Volt_To_Temp_a
-
-	; keep previous temperature reading
-	mov temp_reading, prev_temp_reading
-
-Volt_To_Temp_a:
-	Load_X(0)
-	mov x+0, temp_reading
 	lcall hex2bcd
 	ret
 
