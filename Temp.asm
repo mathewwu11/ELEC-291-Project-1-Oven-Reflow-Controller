@@ -127,6 +127,93 @@ TARGET_TEMP:    db 'Target: xxx', 0xDF, 'C   ', 0
 OVEN_OFF:       db 'OVEN OFF        ', 0
 
 
+
+; Approximate index of sounds in file 'nsound.wav'
+sound_index:       ;index |
+    db 0x00, 0x39, 0x37 ; 0 number1
+    db 0x00, 0xe4, 0x5d ; 1 2
+    db 0x01, 0x94, 0x44 ; 2 3
+    db 0x02, 0x4b, 0x4a ; 3 4
+    db 0x02, 0xf6, 0x71 ; 4 5
+    db 0x03, 0x9c, 0xd6 ; 5 6
+    db 0x04, 0x43, 0x3c ; 6 7
+    db 0x04, 0xfc, 0xa1 ; 7 8
+    db 0x05, 0xa7, 0xc8 ; 8 9
+    db 0x06, 0x61, 0x32 ; 9 10
+    db 0x07, 0x02, 0xd5 ; 10 11
+    db 0x07, 0xad, 0xf9 ; 11 12
+    db 0x08, 0x5d, 0xe1 ; 12 13
+    db 0x09, 0x17, 0x4a ; 13 14
+    db 0x09, 0xb6, 0x8a ; 14 15
+    db 0x0a, 0x5f, 0x50 ; 15 16
+    db 0x0b, 0x0c, 0xd6 ; 16 17
+    db 0x0b, 0xba, 0x5c ; 17 18
+    db 0x0c, 0x6c, 0xa5 ; 18 19
+    db 0x0c, 0xfd, 0xa3 ; 19 20
+    db 0x0d, 0xbb, 0xcc ; 20 30
+    db 0x0e, 0x69, 0x53 ; 21 40
+    db 0x0f, 0x03, 0xd2 ; 22 50
+    db 0x0f, 0xc1, 0xfb ; 23 60
+    db 0x10, 0x6a, 0xc2 ; 24 70
+    db 0x11, 0x15, 0xe8 ; 25 80
+    db 0x11, 0xca, 0x8e ; 26 90
+    db 0x12, 0x78, 0x12 ; 27 100
+    db 0x13, 0x27, 0xfb ; 28 200
+    db 0x13, 0xd0, 0xc0 ; 29 idle
+    db 0x14, 0x77, 0x25 ; 30 heating to soak
+    db 0x15, 0x35, 0x51 ; 31 soaking
+    db 0x15, 0xcd, 0x72 ; 32 heating to reflow
+    db 0x16, 0x8b, 0x8b ; 33 reflowing
+    db 0x17, 0x2a, 0xde ; 34 cooling 
+    db 0x17, 0xd6, 0x05 ; 35 error
+    db 0x18, 0x7e, 0xcc 
+
+; Size of each sound in 'sound_index'
+Size_sound:
+    db 0x00, 0xab, 0x26 ; 0 
+    db 0x00, 0xaf, 0xe7 ; 1 
+    db 0x00, 0xb7, 0x06 ; 2 
+    db 0x00, 0xab, 0x27 ; 3 
+    db 0x00, 0xa6, 0x65 ; 4 
+    db 0x00, 0xa6, 0x66 ; 5 
+    db 0x00, 0xb9, 0x65 ; 6 
+    db 0x00, 0xab, 0x27 ; 7 
+    db 0x00, 0xb9, 0x6a ; 8 
+    db 0x00, 0xa1, 0xa3 ; 9 
+    db 0x00, 0xab, 0x24 ; 10 
+    db 0x00, 0xaf, 0xe8 ; 11 
+    db 0x00, 0xb9, 0x69 ; 12 
+    db 0x00, 0x9f, 0x40 ; 13 
+    db 0x00, 0xa8, 0xc6 ; 14 
+    db 0x00, 0xad, 0x86 ; 15 
+    db 0x00, 0xad, 0x86 ; 16 
+    db 0x00, 0xb2, 0x49 ; 17 
+    db 0x00, 0x90, 0xfe ; 18 
+    db 0x00, 0xbe, 0x29 ; 19 
+    db 0x00, 0xad, 0x87 ; 20 
+    db 0x00, 0x9a, 0x7f ; 21 
+    db 0x00, 0xbe, 0x29 ; 22 
+    db 0x00, 0xa8, 0xc7 ; 23 
+    db 0x00, 0xab, 0x26 ; 24 
+    db 0x00, 0xb4, 0xa6 ; 25 
+    db 0x00, 0xad, 0x84 ; 26 
+    db 0x00, 0xaf, 0xe9 ; 27 
+    db 0x00, 0xa8, 0xc5 ; 28 
+    db 0x00, 0xa6, 0x65 ; 29 
+    db 0x00, 0xbe, 0x2c ; 30 
+    db 0x00, 0x98, 0x21 ; 31 
+    db 0x00, 0xbe, 0x19 ; 32 
+    db 0x00, 0x9f, 0x53 ; 33 
+    db 0x00, 0xab, 0x27 ; 34 
+    db 0x00, 0xa8, 0xc7 ; 35 
+
+
+
+
+
+
+
+
 ;---------------------------------;
 ; Routine to initialize the ISR   ;
 ; for timer 0                     ;
@@ -410,8 +497,9 @@ State_0:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-    lcall Sound_Idle; [sound saying the current state "Idle"]
-
+    ;lcall Sound_Idle; [sound saying the current state "Idle"]
+    mov r0,#29
+    lcall Play_Sound_Using_Index
     ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
     
@@ -877,6 +965,14 @@ setup_done:
     ;-------------------------------------------------- SOUND ----------------------------------------------------
 ; NEED TO FIGURE OUT INDEX AND BYTES OF SOUNDS
 Play_Sound_Using_Index:
+clr TR1 ; Stop Timer 1 ISR from playing previous request
+	setb FLASH_CE
+	clr SPEAKER ; Turn off speaker.
+	
+	clr FLASH_CE ; Enable SPI Flash
+    mov a, #READ_BYTES
+	lcall Send_SPI
+
 mov dptr, #sound_index ; The beginning of the index (3 bytes per entry)
 
 ; multiply R0 by 3 and add it to the dptr
@@ -904,8 +1000,41 @@ clr a
 movc a, @a+dptr
 lcall Send_SPI
 
+; Now set how many bytes to play
+	mov dptr, #Size_sound
+  ; multiply R0 by 3 and add it to the dptr
+mov a, R0
+mov b, #3
+mul ab
+add a, dpl
+mov dpl, a
+mov a, b
+addc a, dph
+mov dph, a
+
+clr a
+movc a, @a+dptr
+mov w+2,a
+
+inc dptr
+clr a
+movc a, @a+dptr
+mov w+1,a
+
+inc dptr
+clr a
+movc a, @a+dptr
+mov w+0,a
+
+
+
+
+setb SPEAKER ; Turn on speaker.
+setb TR1 ; Start playback by enabling Timer 1
+ret
+
 play_temp: 
-    mov a, temp_sound_state
+  ;  mov a, temp_sound_state
    ; clr c 
    ; mov a, temp
    ; subb a, #201 
@@ -924,70 +1053,86 @@ play_temp:
 
 
 
-temp_sound_state0:
-  cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
-   jnb  playstart_flag, temp_sound_state0_done
-   sjmp temp_sound_state1
+;temp_sound_state0:
+  ;cjne a, #0, temp_sound_state1 ;check if state is not 0, if yes go to state 1 
+   ;jnb  playstart_flag, temp_sound_state0_done
+   ;sjmp temp_sound_state1
 
-temp_sound_state0_done:
-    ret
+;temp_sound_state0_done:
+  ;  ret
 
 temp_sound_state1:
-    cjne a, #1, temp_sound_state2
+   ; cjne a, #1, temp_sound_state2
     clr c
-	mov a, temp
+	mov a, temp_reading
     subb a, #101 
-    jnc  temp_gt_100 ;if T>=100, mov temp_sound_state, #2
+    jnc  temp_sound_state2 ;if T>=100, mov temp_sound_state, #2
     
-    mov temp_sound_state, #5 ;else if T<100, mov temp_sound_state, #5
-    sjmp temp_sound_state5
+  ;  mov temp_sound_state, #5 ;else if T<100, mov temp_sound_state, #5
+    ljmp temp_sound_state5
 
 
 temp_gt_100:
-    mov Sound_FSM_State, #2
+    mov temp_sound_state, #2
+    
 
 temp_sound_state2:
-    cjne a, #2, temp_sound_state3
-    mov a, temp
+   ; cjne a, #2, temp_sound_state3
+    mov a, temp_reading
     subb a, #201
     jnc temp_gt_200 ;if T>=200, lcall Play_Sound_Using_Index for 200
+    mov r0,#27
     lcall Play_Sound_Using_Index ;if T<200,  lcall Play_Sound_Using_Index for 100
-    mov Sound_FSM_State, #3
+   ; mov temp_sound_state, #3
+    ljmp temp_sound_state3
 
 temp_gt_200:
+    mov r0,#28
     lcall Play_Sound_Using_Index
 
 temp_sound_state3:
+   jnb TR1, temp_sound_state5
+   sjmp temp_sound_state3
+   ;stay in state 3
+   
+   
     ;if PLAYDONE=0, mov temp_sound_state, #3
     ;if PLAYDONE=1, mov temp_sound_state, #5
 
 temp_sound_state5:
     cjne a, #5, temp_sound_state6
-    mov a, #(temp%0x100)
+    mov a, #(temp_reading%0x100)
     subb a, #20
     jnc temp_mod_gt_20 ;if (T%100)>=20, temp_sound_state, #8
-    mov temp_sound_state, #6 ;else if (T%100)<20, temp_sound_state, #6
-
+   ; mov temp_sound_state, #6 ;else if (T%100)<20, temp_sound_state, #6
+    ljmp temp_sound_state6
 temp_mod_gt_20:
     mov temp_sound_state, #8
 
 temp_sound_state6:
-    cjne a, #6, temp_sound_state7
-    ;play(T%100)
-    mov Sound_FSM_State, #7
+   ; cjne a, #6, temp_sound_state7
+    mov r0,#(temp_reading%100+1)
+    lcall Play_Sound_Using_Index
+   ; mov temp_sound_state, #7
 
 temp_sound_state7:
    cjne a, #7, temp_sound_state8
+   jnb TR1, temp_sound_state0
+   ;otherwise stay in state 7
+
    ; if PLAYDONE=0, mov temp_sound_state, #7
    ; if PLAYDONE=1, mov temp_sound_state, #0
 
 temp_sound_state8:
     cjne a, #8, temp_sound_state9
     ;play '20', '30', '40'....
-    mov Sound_FSM_State, #9
+    mov temp_sound_state, #9
 
 temp_sound_state9:
    cjne a, #9, temp_sound_state10
+    jnb TR1, temp_sound_state10
+    ;otherwise stay in state 9
+
     ;if PLAYDONE=0, mov temp_sound_state, #9
   ; if PLAYDONE=1, mov temp_sound_state, #10
 
@@ -1180,3 +1325,5 @@ Sound_Error:
 	setb SPEAKER ; Turn on speaker.
 	setb TR1 ; Start playback by enabling Timer 1
     ret
+    
+   
