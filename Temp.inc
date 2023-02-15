@@ -113,6 +113,32 @@ putchar:
     mov SBUF, a
     ret
 
+;---------------------------------;
+; Sends AND receives a byte via   ;
+; SPI.                            ;
+;---------------------------------;
+Send_SPI:
+	SPIBIT MAC
+	    ; Send/Receive bit %0
+		rlc a
+		mov PIN_TWO_FOUR, c
+		setb PIN_TWO_ZERO
+		mov c, PIN_TWO_ONE
+		clr PIN_TWO_ZERO
+		mov acc.0, c
+	ENDMAC
+	
+	SPIBIT(7)
+	SPIBIT(6)
+	SPIBIT(5)
+	SPIBIT(4)
+	SPIBIT(3)
+	SPIBIT(2)
+	SPIBIT(1)
+	SPIBIT(0)
+
+	ret
+
 ; Send a constant-zero-terminated string using the serial port
 SendString:
     clr A
