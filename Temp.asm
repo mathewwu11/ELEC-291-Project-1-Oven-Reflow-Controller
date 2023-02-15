@@ -501,10 +501,7 @@ Heating_To_Soak_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Soak_b
     clr five_seconds_flag
-    mov r0, #19; load sound index for 20 in r0
-    lcall Play_Sound_Using_Index; play the sound for 20
-    mov r0, #1; load sound index for 2 in r0
-    lcall Play_Sound_Using_Index; play the sound for 2
+    lcall Play_Temp_Sound
 Heating_To_Soak_b:
     ; if temperature >= reflow temperature, TEMP_OK = 0
     ; else 1
