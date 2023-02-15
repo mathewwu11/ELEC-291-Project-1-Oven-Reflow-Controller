@@ -913,5 +913,6 @@ setup_done:
     Set_Cursor(1,1)
     Send_Constant_String(#CURRENT_TEMP)
     lcall Read_ADC
+    lcall Volt_To_Temp
     Display_temp_BCD(1,8)
     ljmp State_0
