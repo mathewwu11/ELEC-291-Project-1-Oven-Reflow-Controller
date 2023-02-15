@@ -545,7 +545,7 @@ Heating_To_Soak_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Soak_b
     clr five_seconds_flag
-    lcall Play_Temp_Sound; [function to play sound here]
+    ;lcall Play_Temp_Sound; [function to play sound here]
 Heating_To_Soak_b:
     ; if temperature >= reflow temperature, TEMP_OK = 0
     ; else 1
@@ -687,7 +687,7 @@ Reflowing_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Reflowing_b
     clr five_seconds_flag
-    lcall Play_Temp_Sound ; [function to play sound here]
+    ;lcall Play_Temp_Sound ; [function to play sound here]
 Reflowing_b:
     Load_X(0)
     Load_Y(0)
@@ -762,7 +762,7 @@ Cooldown_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Cooldown_b
     clr five_seconds_flag
-    lcall Play_Temp_Sound ; [function to play sound here] NOT FUNCTIONAL
+    ;lcall Play_Temp_Sound ; [function to play sound here] NOT FUNCTIONAL
 Cooldown_b:
     Load_X(0)
     Load_Y(50)
