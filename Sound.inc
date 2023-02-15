@@ -2,6 +2,8 @@
 ; NEED TO FIGURE OUT INDEX AND BYTES OF SOUNDS
 
 Play_Sound_Using_Index:
+
+     push acc
     ; clr TR1 ; Stop Timer 1 ISR from playing previous request
 	; setb FLASH_CE
 	; clr SPEAKER ; Turn off speaker.
@@ -68,6 +70,7 @@ Play_Sound_Using_Index:
 
     setb SPEAKER ; Turn on speaker.
     setb TR1 ; Start playback by enabling Timer 1
+    pop acc
     ret
 
 Play_Temp_Sound:
