@@ -73,7 +73,7 @@ Send_10_digit_BCD:
 Read_ADC:
 	lcall InitSerialPort
 	lcall INIT_SPI
-	
+
     clr CE_ADC
     mov R0, #00000001B ; Start bit:1
     lcall DO_SPI_G
@@ -167,8 +167,6 @@ read_state:
 
 ; Converts the voltage reading in the from the ADC to its corresponding temperature
 Volt_To_Temp:
-	; save previous temperature reading
-	mov prev_temp_reading, temp_reading
 	mov x+0, volt_reading+0
 	mov x+1, volt_reading+1
 	mov x+2, #0
