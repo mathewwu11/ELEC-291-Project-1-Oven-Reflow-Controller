@@ -6,8 +6,6 @@ CLK  EQU 22118400
 BAUD equ 115200
 BRG_VAL equ (0x100-(CLK/(16*BAUD)))
 
-TIMER0_RATE   EQU 4096     ; 2048Hz squarewave (peak amplitude of CEM-1203 speaker)
-TIMER0_RELOAD EQU ((65536-(CLK/TIMER0_RATE)))
 TIMER1_RATE    EQU 22050     ; 22050Hz is the sampling rate of the wav file we are playing
 TIMER1_RELOAD  EQU 0x10000-(CLK/TIMER1_RATE)
 TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
@@ -83,16 +81,13 @@ soaktemp:           ds 1
 reflowtemp:         ds 1
 volt_reading:       ds 2 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 temp_reading:       ds 1
-fsm_state:          ds 1 
 w:   				ds 3 ; 24-bit play counter.  Decremented in Timer 1 ISR.
-
 
 BSEG
 seconds_flag:       dbit 1
 five_seconds_flag:  dbit 1
 mf:                 dbit 1 ; this dseg is used in the INC file, any changes to name need to also be updated in INC file
 hold_button:        dbit 1
-sound_flag:         dbit 1
 play_done:          dbit 1
 
 CSEG
@@ -225,7 +220,7 @@ Timer1_Init:
 
 	; Enable the timer and interrupts
     setb ET1  ; Enable timer 1 interrupt
-	; setb TR1 ; Timer 1 is only enabled to play stored sound
+	clr TR1 ; Timer 1 is only enabled to play stored sound
 
 	; Configure the DAC.  The DAC output we are using is P2.3, but P2.2 is also reserved.
 	mov DADI, #0b_1010_0000 ; ACON=1
@@ -293,9 +288,6 @@ Timer1_ISR:
 	push acc
 	push psw
 
-    ; Timer 1 is playing a sound. Set a flag so the main program knows
-	clr play_done
-
 	; Check if the play counter is zero.  If so, stop playing sound.
 	mov a, w+0
 	orl a, w+1
@@ -354,9 +346,9 @@ Timer2_ISR:
 Inc_Done:
 	; Check if 1 second has passed
 	mov a, Count1ms+0
-	cjne a, #low(250), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
+	cjne a, #low(1000), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
 	mov a, Count1ms+1
-	cjne a, #high(250), Timer2_ISR_done
+	cjne a, #high(1000), Timer2_ISR_done
 	
 	; 1 second has passed. Set a flag so the main program knows
 	setb seconds_flag ; Let the main program know 1 second has passed
@@ -440,7 +432,7 @@ State_0:
     Send_Constant_String(#OVEN_OFF)
 
     ;lcall Sound_Idle; [sound saying the current state "Idle"]
-    mov r0,#29
+    mov r0, #29
     lcall Play_Sound_Using_Index
     ; if BOOT_BUTTON is being pressed, wait for release
     jnb BOOT_BUTTON, $
@@ -483,7 +475,7 @@ State_1:
     Display_temp_BCD(2,8)
 
     ; [Sound for saying the current state "Heating to soak"]
-    mov r0,#30
+    mov r0, #30
     lcall Play_Sound_Using_Index
     sjmp Heating_To_Soak
 
@@ -501,10 +493,7 @@ Heating_To_Soak_a:
     ; play sound every five seconds
     jnb five_seconds_flag, Heating_To_Soak_b
     clr five_seconds_flag
-    mov r0, #19; load sound index for 20 in r0
-    lcall Play_Sound_Using_Index; play the sound for 20
-    mov r0, #1; load sound index for 2 in r0
-    lcall Play_Sound_Using_Index; play the sound for 2
+    lcall Play_Temp_Sound; [function to play sound here]
 Heating_To_Soak_b:
     ; if temperature >= reflow temperature, TEMP_OK = 0
     ; else 1
@@ -701,7 +690,6 @@ State_6:
     Set_Cursor(2,1)
     Send_Constant_String(#OVEN_OFF)
 
-
     mov r0, #35 ; moves the index for error into r0
     lcall Play_Sound_Using_Index; [Sound saying current state "Error"]
     sjmp Cooldown
@@ -743,6 +731,7 @@ Cooldown_d:
 
 ;-------------------------------------------------- SETUP ----------------------------------------------------
 setup:
+    clr TR2
     ; temperature not set, TEMP_OK = 0
     clr TEMP_OK
     ; prints "SOAK" left aligned in the top row
@@ -916,4 +905,5 @@ setup_done:
     Send_Constant_String(#CURRENT_TEMP)
     lcall Read_ADC
     Display_temp_BCD(1,8)
+    setb TR2
     ljmp State_0

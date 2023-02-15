@@ -1,10 +1,6 @@
 ;-------------------------------------------------- SOUND ----------------------------------------------------
 ; NEED TO FIGURE OUT INDEX AND BYTES OF SOUNDS
 Play_Sound_Using_Index:
-    ; clr TR1 ; Stop Timer 1 ISR from playing previous request
-	; setb FLASH_CE
-	; clr SPEAKER ; Turn off speaker.
-	
 	clr FLASH_CE ; Enable SPI Flash
     mov a, #READ_BYTES
 	lcall Send_SPI
