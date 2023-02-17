@@ -159,9 +159,9 @@ Timer2_ISR:
 Inc_Done:
 	; Check if 1 second has passed
 	mov a, Count1ms+0
-	cjne a, #low(250), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
+	cjne a, #low(1000), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
 	mov a, Count1ms+1
-	cjne a, #high(250), Timer2_ISR_done
+	cjne a, #high(1000), Timer2_ISR_done
 	
 	; 1 second has passed. Set a flag so the main program knows
 	setb seconds_flag ; Let the main program know 1 second has passed

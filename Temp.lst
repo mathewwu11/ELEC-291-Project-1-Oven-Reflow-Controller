@@ -174,9 +174,9 @@
 054C            159   Inc_Done:
 054C            160            ; Check if 1 second has passed
 054C E530       161            mov a, Count1ms+0
-054E B4FA18     162            cjne a, #low(250), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
+054E B4E818     162            cjne a, #low(1000), Timer2_ISR_done ; Warning: this instruction high_low_flags the carry flag!
 0551 E531       163            mov a, Count1ms+1
-0553 B40013     164            cjne a, #high(250), Timer2_ISR_done
+0553 B40313     164            cjne a, #high(1000), Timer2_ISR_done
 0556            165            
 0556            166            ; 1 second has passed. Set a flag so the main program knows
 0556 D200       167            setb seconds_flag ; Let the main program know 1 second has passed
